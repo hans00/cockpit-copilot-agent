@@ -76,7 +76,7 @@ export const Application = () => {
                 justifyContent: 'space-between',
             }}
             >
-                <Title headingLevel="h1" size="lg">{_("Cockpit Copilot")}</Title>
+                <Title headingLevel="h1" size="lg">{_("Copilot Agent")}</Title>
                 {isAdmin && (
                     <Button variant="plain" onClick={() => setIsSettingsOpen(true)} aria-label={_("Settings")}>
                         <CogIcon />
