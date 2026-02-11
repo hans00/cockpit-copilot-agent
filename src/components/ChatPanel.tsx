@@ -6,7 +6,7 @@ import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/in
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { RobotIcon, UserIcon, WrenchIcon, CheckCircleIcon, TimesCircleIcon } from '@patternfly/react-icons';
+import { RobotIcon, UserIcon, WrenchIcon, CheckCircleIcon, TimesCircleIcon, PaperPlaneIcon } from '@patternfly/react-icons';
 import { marked } from 'marked';
 import { ChatMessage, ToolCall } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
@@ -152,8 +152,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                         autoResize
                         style={{ minHeight: '50px', maxHeight: '150px', width: '100%' }}
                     />
-                    <Button variant="primary" onClick={handleSubmit} isDisabled={isProcessing || waitingForApproval !== null}>
-                        {_("Send")}
+                    <Button variant="primary" onClick={handleSubmit} isDisabled={isProcessing || waitingForApproval !== null || !input.trim()} aria-label={_("Send")}>
+                        <PaperPlaneIcon />
                     </Button>
                 </div>
             </div>

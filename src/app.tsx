@@ -2,10 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { Page, PageSidebar, PageSidebarBody, PageSection } from "@patternfly/react-core/dist/esm/components/Page/index.js";
-import { Masthead, MastheadMain, MastheadBrand, MastheadContent } from "@patternfly/react-core/dist/esm/components/Masthead/index.js";
+import { Masthead, MastheadMain, MastheadBrand, MastheadContent, MastheadToggle } from "@patternfly/react-core/dist/esm/components/Masthead/index.js";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar/index.js";
 import { Nav, NavList, NavItem } from "@patternfly/react-core/dist/esm/components/Nav/index.js";
-import { CogIcon } from '@patternfly/react-icons';
+import { CogIcon, BarsIcon } from '@patternfly/react-icons';
 
 import { ChatPanel } from "./components/ChatPanel.jsx";
 import { SettingsPage } from "./components/SettingsPage.jsx";
@@ -23,6 +23,7 @@ export const Application = () => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [isAgentInit, setIsAgentInit] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     // Initialize Agent on mount
     useEffect(() => {
@@ -50,6 +51,15 @@ export const Application = () => {
 
     const Header = (
         <Masthead>
+            <MastheadToggle>
+                <Button
+                    variant="plain"
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    aria-label="Global navigation"
+                >
+                    <BarsIcon />
+                </Button>
+            </MastheadToggle>
             <MastheadMain>
                 <MastheadBrand>{_("Cockpit Copilot")}</MastheadBrand>
             </MastheadMain>
@@ -81,7 +91,7 @@ export const Application = () => {
     );
 
     const Sidebar = (
-        <PageSidebar isSidebarOpen>
+        <PageSidebar isSidebarOpen={isSidebarOpen}>
             <PageSidebarBody>
                 {Navigation}
             </PageSidebarBody>
