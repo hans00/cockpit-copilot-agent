@@ -1,5 +1,7 @@
-import subprocess
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import shutil
+import subprocess
+
 
 async def get_info() -> str:
     """Get ip addr output"""
@@ -16,7 +18,7 @@ async def download_file(url: str, dest: str) -> str:
         cmd = ["wget", "-O", dest, url]
     else:
         return "Error: neither curl nor wget found."
-        
+
     try:
         # This will block the server! For large files we need async execution or a background job.
         # But for now, let's run it. In production, this should be a background task with progress reporting.

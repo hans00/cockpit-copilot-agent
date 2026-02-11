@@ -1,13 +1,14 @@
-import cockpit from "cockpit";
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+import cockpit, { Spawn } from "cockpit";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { McpServerConfig, McpTool, CockpitProcess } from "./types.js";
+import { McpServerConfig, McpTool } from "./types.js";
 
 // Custom Transport for Cockpit Spawn (Stdio)
 class CockpitStdioTransport implements Transport {
-    private process: CockpitProcess | undefined;
+    private process: Spawn<string> | undefined;
     private buffer = "";
     private config: McpServerConfig;
 
@@ -28,24 +29,20 @@ class CockpitStdioTransport implements Transport {
                 this.process = cockpit.spawn([command, ...(this.config.args || [])], {
                     superuser: "try",
                     environ: ["PYTHONUNBUFFERED=1"]
-                }) as unknown as CockpitProcess;
+                });
 
                 if (this.process) {
                     this.process.stream((data: string) => {
                         this.handleData(data);
                     });
 
-                    this.process.stderr((data: string) => {
-                        console.error(`MCP[${this.config.name}] stderr: ${data}`);
-                    });
-
-                    this.process.on("close", () => {
-                        if (this.onclose) this.onclose();
-                    });
-
-                    this.process.on("error", (err: unknown) => {
-                        if (this.onerror) this.onerror(new Error((err as Error).message || String(err)));
+                    this.process.fail((err: Error) => {
+                        if (this.onerror) this.onerror(err);
                         reject(err);
+                    });
+
+                    this.process.done(() => {
+                        if (this.onclose) this.onclose();
                     });
                 }
 

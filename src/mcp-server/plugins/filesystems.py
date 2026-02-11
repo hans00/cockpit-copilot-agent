@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import shutil
 import subprocess
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from .base import ToolPlugin
+
 
 class FilesystemPlugin(ToolPlugin):
     @property
@@ -24,7 +27,7 @@ class FilesystemPlugin(ToolPlugin):
                 "inputSchema": {"type": "object", "properties": {}}
             }
         ]
-        
+
         if shutil.which("zpool"):
              tools.extend([
                  {
@@ -41,7 +44,7 @@ class FilesystemPlugin(ToolPlugin):
                     "name": "zvol_create",
                     "description": "Create a ZFS volume (zvol)",
                     "inputSchema": {
-                        "type": "object", 
+                        "type": "object",
                         "properties": {
                             "pool": {"type": "string", "description": "Pool name"},
                             "name": {"type": "string", "description": "Volume name"},
@@ -63,19 +66,19 @@ class FilesystemPlugin(ToolPlugin):
                     "required": ["device"]
                 }
             })
-            
+
         return tools
 
     def execute(self, tool_name: str, args: Dict[str, Any]) -> Any:
         if tool_name == "disk_list":
             return self._run(["lsblk", "-o", "NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT"])
-            
+
         elif tool_name == "zpool_status":
             return self._run(["zpool", "status"])
-            
+
         elif tool_name == "zfs_list":
             return self._run(["zfs", "list"])
-            
+
         elif tool_name == "zvol_create":
             # zfs create -V 10G -o volblocksize=64k pool/name
             cmd = ["zfs", "create", "-V", args["size"]]

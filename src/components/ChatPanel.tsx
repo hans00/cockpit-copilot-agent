@@ -1,5 +1,11 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardBody, CardTitle, CardFooter, Button, TextArea, Spinner, Label, EmptyState, EmptyStateBody } from "@patternfly/react-core";
+import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
+import { Card, CardBody, CardTitle, CardFooter } from "@patternfly/react-core/dist/esm/components/Card/index.js";
+import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/index.js";
+import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
+import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { RobotIcon, UserIcon, WrenchIcon, CheckCircleIcon, TimesCircleIcon } from '@patternfly/react-icons';
 import { marked } from 'marked';
 import { ChatMessage, ToolCall } from "../lib/types.js";

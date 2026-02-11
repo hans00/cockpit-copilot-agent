@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+import logging
 import shutil
 import subprocess
-import logging
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from .base import ToolPlugin
 
 logger = logging.getLogger(__name__)
@@ -90,12 +92,30 @@ class VmPlugin(ToolPlugin):
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string", "description": "VM Name"},
-                        "vcpu": {"type": "integer", "description": "Number of vCPUs"},
-                        "ram_mb": {"type": "integer", "description": "RAM in MB"},
-                        "disk_path": {"type": "string", "description": "Path to disk image or zvol (e.g. /dev/zvol/pool/name)"},
-                        "iso_path": {"type": "string", "description": "Path to installer ISO"},
-                        "os_variant": {"type": "string", "description": "OS variant (e.g. ubuntu22.04), optional"}
+                        "name": {
+                            "type": "string",
+                            "description": "VM Name"
+                        },
+                        "vcpu": {
+                            "type": "integer",
+                            "description": "Number of vCPUs"
+                        },
+                        "ram_mb": {
+                            "type": "integer",
+                            "description": "RAM in MB"
+                        },
+                        "disk_path": {
+                            "type": "string",
+                            "description": "Path to disk image or zvol (e.g. /dev/zvol/pool/name)"
+                        },
+                        "iso_path": {
+                            "type": "string",
+                            "description": "Path to installer ISO"
+                        },
+                        "os_variant": {
+                            "type": "string",
+                            "description": "OS variant (e.g. ubuntu22.04), optional"
+                        }
                     },
                     "required": ["name", "vcpu", "ram_mb", "disk_path", "iso_path"]
                 }
@@ -121,7 +141,7 @@ class VmPlugin(ToolPlugin):
             raise ValueError(f"Unknown tool: {tool_name}")
 
     def _run_virsh(self, cmd_args: List[str]) -> str:
-        cmd = ["virsh"] + cmd_args
+        cmd = ["virsh", *cmd_args]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return result.stdout
@@ -131,7 +151,7 @@ class VmPlugin(ToolPlugin):
     def _create_vm(self, args: Dict[str, Any]) -> str:
         if not shutil.which("virt-install"):
             return "Error: virt-install is not installed."
-            
+
         cmd = [
             "virt-install",
             "--name", args["name"],
@@ -143,7 +163,7 @@ class VmPlugin(ToolPlugin):
             "--noautoconsole", # Don't try to open console viewer
             "--graphics", "vnc" # Use VNC graphics
         ]
-        
+
         try:
             # this takes time, but it backgrounds almost immediately unless waiting for install?
             # virt-install with --noautoconsole returns quickly after starting the VM setup

@@ -1,24 +1,26 @@
-from mcp.server import Server
-from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import logging
-import asyncio
+from typing import Optional
 
-# Core tools imports
-from .tools import systemd, packages, files, network, users, logs
+from mcp.server import Server
+from mcp.types import TextContent
 
 # Plugin discovery
 from .plugins import discover_plugins
+
+# Core tools imports
+from .tools import files, logs, network, packages, systemd, users
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp_server")
 
-async def serve():
+async def serve(permissions: str):
     app = Server("cockpit-copilot-server")
 
     # --- Register Core Tools ---
     # These are always available (or checked individually)
-    
+
     # Systemd
     @app.tool()
     async def service_list():
@@ -91,7 +93,7 @@ async def serve():
 
     # Logs
     @app.tool()
-    async def journal_query(service: str = None, lines: int = 50):
+    async def journal_query(service: Optional[str] = None, lines: int = 50):
         """Query system logs (journalctl)"""
         return await logs.query_journal(service, lines)
 
@@ -111,25 +113,25 @@ async def serve():
     # --- Register Plugin Tools ---
     active_plugins = discover_plugins()
     for plugin in active_plugins:
-        logger.info(f"Registering tools for plugin: {plugin.name}")
-        
+        logger.info("Registering tools for plugin: %s", plugin.name)
+
         # We need to dynamically register tools from plugins.
         # MCPServer requires decorators, but we can also add manually if the SDK supports it.
         # The python MCP SDK uses `app.tool()` decorator which registers into an internal registry.
         # We can iterate plugin.get_tools() and register wrapper functions.
-        
+
         for tool_def in plugin.get_tools():
             tool_name = tool_def["name"]
             tool_desc = tool_def.get("description", "")
-            
+
             # Create a closure to capture tool_name and plugin
             async def wrapper(plugin=plugin, tool_name=tool_name, **kwargs):
                 return await plugin.execute(tool_name, kwargs)
-            
+
             # Set metadata
             wrapper.__name__ = tool_name
             wrapper.__doc__ = tool_desc
-            
+
             # Register with the app
             app.tool()(wrapper)
 

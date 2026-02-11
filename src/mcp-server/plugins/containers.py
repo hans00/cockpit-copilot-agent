@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import shutil
 import subprocess
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from .base import ToolPlugin
+
 
 class ContainerPlugin(ToolPlugin):
     def __init__(self):
@@ -82,12 +85,33 @@ class ContainerPlugin(ToolPlugin):
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "image": {"type": "string", "description": "Image name (e.g. alpine:latest)"},
-                        "name": {"type": "string", "description": "Container name (optional)"},
-                        "ports": {"type": "array", "items": {"type": "string"}, "description": "Port mappings (e.g. 8080:80)"},
-                        "vols": {"type": "array", "items": {"type": "string"}, "description": "Volume mappings (e.g. /host:/container)"},
-                        "env": {"type": "array", "items": {"type": "string"}, "description": "Environment variables (e.g. KEY=VAL)"},
-                        "detach": {"type": "boolean", "description": "Run in background (default true)"}
+                        "image": {
+                            "type": "string",
+                            "description": "Image name (e.g. alpine:latest)"
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Container name (optional)"
+                        },
+                        "ports": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Port mappings (e.g. 8080:80)"
+                        },
+                        "vols": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Volume mappings (e.g. /host:/container)"
+                        },
+                        "env": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Environment variables (e.g. KEY=VAL)"
+                        },
+                        "detach": {
+                            "type": "boolean",
+                            "description": "Run in background (default true)"
+                        }
                     },
                     "required": ["image"]
                 }
@@ -101,7 +125,7 @@ class ContainerPlugin(ToolPlugin):
 
     def execute(self, tool_name: str, args: Dict[str, Any]) -> Any:
         # Check permissions for modifying actions? handled in permissions.py map
-        
+
         if tool_name == "container_list":
             return self._run([self.runtime, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.Image}} {{.Status}}"])
         elif tool_name == "container_inspect":

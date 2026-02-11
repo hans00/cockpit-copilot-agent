@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # Tools that require root privileges
 ROOT_REQUIRED_TOOLS = {
     "service_action",
@@ -6,7 +7,7 @@ ROOT_REQUIRED_TOOLS = {
     "network_modify",
     "user_add",
     "zvol_create",
-    "container_run", 
+    "container_run",
     "container_create",
     "container_start",
     "container_stop",
@@ -21,8 +22,8 @@ def is_tool_allowed(tool_name, user_privilege):
     """
     if user_privilege == "admin":
         return True
-    
+
     if tool_name in ROOT_REQUIRED_TOOLS:
         return False
-        
+
     return True

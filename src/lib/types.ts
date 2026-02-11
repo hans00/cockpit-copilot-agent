@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 export interface McpTool {
     name: string;
     description?: string;
@@ -31,10 +32,10 @@ export interface CopilotSettings {
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
     llm: {
-        provider: "ollama",
-        apiKey: "ollama",
-        baseUrl: "http://localhost:11434/v1",
-        model: "llama3"
+        provider: "openai",
+        apiKey: "",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o"
     },
     mcpServers: [],
     customSystemPrompt: ""
@@ -60,12 +61,4 @@ export interface ChatMessage {
     content: string; // basic text content
     toolCalls?: ToolCall[];
     toolResult?: ToolResult;
-}
-
-export interface CockpitProcess {
-    stream: (callback: (data: string) => void) => void;
-    input: (data: string) => void;
-    close: () => void;
-    stderr: (callback: (data: string) => void) => void;
-    on: (event: string, callback: (error?: unknown) => void) => void;
 }

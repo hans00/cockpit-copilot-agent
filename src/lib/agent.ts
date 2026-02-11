@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import { ChatMessage, CopilotSettings, ToolCall } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { McpClientManager } from "./mcp-client.js";

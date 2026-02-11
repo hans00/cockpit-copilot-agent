@@ -1,4 +1,6 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import subprocess
+
 
 async def list_users() -> str:
     """List normal users (UID >= 1000)"""

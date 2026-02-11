@@ -1,5 +1,10 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useEffect, useState } from 'react';
-import { Page, PageSidebar, PageSidebarBody, PageSection, Masthead, MastheadMain, MastheadBrand, MastheadContent, Toolbar, ToolbarContent, ToolbarItem, Nav, NavList, NavItem, Button } from "@patternfly/react-core";
+import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
+import { Page, PageSidebar, PageSidebarBody, PageSection } from "@patternfly/react-core/dist/esm/components/Page/index.js";
+import { Masthead, MastheadMain, MastheadBrand, MastheadContent } from "@patternfly/react-core/dist/esm/components/Masthead/index.js";
+import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar/index.js";
+import { Nav, NavList, NavItem } from "@patternfly/react-core/dist/esm/components/Nav/index.js";
 import { CogIcon } from '@patternfly/react-icons';
 
 import { ChatPanel } from "./components/ChatPanel.jsx";

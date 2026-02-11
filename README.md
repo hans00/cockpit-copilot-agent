@@ -73,11 +73,11 @@ set to upload code changes to `~/.local/share/cockpit/` instead of
 To "uninstall" the locally installed version, run `make devel-uninstall`, or
 remove manually the symlink:
 
-    rm ~/.local/share/cockpit/starter-kit
+    rm ~/.local/share/cockpit/cockpit-copilot-agent
 
 # Running eslint
 
-Cockpit Starter Kit uses [ESLint](https://eslint.org/) to automatically check
+Cockpit Copilot Agent uses [ESLint](https://eslint.org/) to automatically check
 JavaScript/TypeScript code style in `.js[x]` and `.ts[x]` files.
 
 eslint is executed as part of `test/static-code`, aka. `make codecheck`.
@@ -139,7 +139,7 @@ These tests can be run in [Cirrus CI](https://cirrus-ci.org/), on their free
 [Linux Containers](https://cirrus-ci.org/guide/linux/) environment which
 explicitly supports `/dev/kvm`. Please see [Quick
 Start](https://cirrus-ci.org/guide/quick-start/) how to set up Cirrus CI for
-your project after forking from starter-kit.
+your project.
 
 The included [.cirrus.yml](./.cirrus.yml) runs the integration tests for two
 operating systems (Fedora and CentOS 8). Note that if/once your project grows
@@ -158,7 +158,7 @@ they only run [@nondestructive tests](https://github.com/cockpit-project/cockpit
 
 # Customizing
 
-After cloning the Starter Kit you should rename the files, package names, and
+After cloning the project you should rename the files, package names, and
 labels to your own project's name. Use these commands to find out what to
 change:
 
@@ -197,7 +197,7 @@ see [configuration file](.github/dependabot.yml).
 
 # Further reading
 
- * The [Starter Kit announcement](https://cockpit-project.org/blog/cockpit-starter-kit.html)
+ * The [Cockpit development announcement](https://cockpit-project.org/blog/cockpit-starter-kit.html)
    blog post explains the rationale for this project.
  * [Cockpit Deployment and Developer documentation](https://cockpit-project.org/guide/latest/)
  * [Make your project easily discoverable](https://cockpit-project.org/blog/making-a-cockpit-application.html)

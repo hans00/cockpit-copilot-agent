@@ -1,5 +1,11 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useEffect, useState } from 'react';
-import { Form, FormGroup, ActionGroup, TextInput, TextArea, Button, Alert, Title } from "@patternfly/react-core";
+import { Form, FormGroup, ActionGroup } from "@patternfly/react-core/dist/esm/components/Form/index.js";
+import { TextInput } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
+import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/index.js";
+import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
+import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
+import { Title } from "@patternfly/react-core/dist/esm/components/Title/index.js";
 
 import { loadSettings, saveSettings } from "../lib/settings.js";
 import { readCredentials, writeCredentials } from "../lib/credentials.js";

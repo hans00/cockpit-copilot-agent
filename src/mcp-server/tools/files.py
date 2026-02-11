@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import os
 
 MAX_READ_SIZE = 100 * 1024 # 100KB limit for now to avoid huge output
@@ -5,12 +6,12 @@ MAX_READ_SIZE = 100 * 1024 # 100KB limit for now to avoid huge output
 async def read_file(path: str) -> str:
     if not os.path.exists(path):
         return f"Error: File not found: {path}"
-    
+
     try:
         size = os.path.getsize(path)
         if size > MAX_READ_SIZE:
              return f"Error: File too large to read (>{MAX_READ_SIZE} bytes)"
-             
+
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
             return f.read()
     except Exception as e:
@@ -28,7 +29,7 @@ async def write_file(path: str, content: str) -> str:
 async def list_dir(path: str) -> str:
     if not os.path.exists(path):
         return f"Error: Path not found: {path}"
-        
+
     try:
         items = os.listdir(path)
         output = []

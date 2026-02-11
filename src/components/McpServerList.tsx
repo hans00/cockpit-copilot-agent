@@ -1,5 +1,10 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useState } from 'react';
-import { Button, DataList, DataListItem, DataListItemRow, DataListItemCells, DataListCell, DataListAction, Modal, ModalVariant, ModalHeader, ModalBody, ModalFooter, Form, FormGroup, TextInput } from "@patternfly/react-core";
+import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
+import { DataList, DataListItem, DataListItemRow, DataListItemCells, DataListCell, DataListAction } from "@patternfly/react-core/dist/esm/components/DataList/index.js";
+import { Modal, ModalVariant, ModalHeader, ModalBody, ModalFooter } from "@patternfly/react-core/dist/esm/components/Modal/index.js";
+import { Form, FormGroup } from "@patternfly/react-core/dist/esm/components/Form/index.js";
+import { TextInput } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
 import { McpServerConfig } from "../lib/types.js";
 import { PlusCircleIcon, TrashIcon } from '@patternfly/react-icons';
 import { v4 as uuidv4 } from 'uuid';

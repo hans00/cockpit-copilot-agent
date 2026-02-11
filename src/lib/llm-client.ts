@@ -1,5 +1,10 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import OpenAI from "openai";
 import { ChatMessage, ToolCall, McpTool } from "./types.js";
+
+const genId = (prefix: string) =>
+    `${prefix}_${Math.random().toString(36)
+            .substring(2, 9)}`;
 
 interface LlmConfig {
     apiKey: string;
@@ -54,7 +59,7 @@ export class LlmClient {
             };
         });
 
-        const toolsBody = tools.map(t => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+        const toolsBody = tools.map(t => ({
             type: "function" as const,
             function: {
                 name: t.name,
@@ -108,8 +113,7 @@ export class LlmClient {
             }
 
             const toolCalls: ToolCall[] = Array.from(toolCallsMap.values()).map((tc) => ({
-                id: tc.id || "call_" + Math.random().toString(36)
-                        .substring(2, 9), // Ollama sometimes omits ID
+                id: tc.id || genId("call"),
                 function: {
                     name: tc.name,
                     arguments: tc.args

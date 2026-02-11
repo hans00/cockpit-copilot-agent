@@ -1,11 +1,24 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 import shutil
 import subprocess
 from typing import List
 
 PACKAGE_MANAGERS = {
-    "dnf": {"install": ["dnf", "install", "-y"], "remove": ["dnf", "remove", "-y"], "search": ["dnf", "search"]},
-    "apt-get": {"install": ["apt-get", "install", "-y"], "remove": ["apt-get", "remove", "-y"], "search": ["apt-cache", "search"]},
-    "zypper": {"install": ["zypper", "install", "-y"], "remove": ["zypper", "remove", "-y"], "search": ["zypper", "search"]},
+    "dnf": {
+        "install": ["dnf", "install", "-y"],
+        "remove": ["dnf", "remove", "-y"],
+        "search": ["dnf", "search"]
+    },
+    "apt-get": {
+        "install": ["apt-get", "install", "-y"],
+        "remove": ["apt-get", "remove", "-y"],
+        "search": ["apt-cache", "search"]
+    },
+    "zypper": {
+        "install": ["zypper", "install", "-y"],
+        "remove": ["zypper", "remove", "-y"],
+        "search": ["zypper", "search"]
+    },
 }
 
 def get_package_manager():
