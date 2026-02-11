@@ -113,7 +113,7 @@ export class LlmClient {
 
                 if (delta?.tool_calls) {
                     for (const tc of delta.tool_calls) {
-                        const idx = tc.index;
+                        const idx = tc.index ?? toolCallsMap.size;
                         if (!toolCallsMap.has(idx)) {
                             toolCallsMap.set(idx, { id: "", name: "", args: "" });
                         }

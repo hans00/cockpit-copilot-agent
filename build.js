@@ -97,10 +97,10 @@ const context = await esbuild.context({
     bundle: true,
     entryPoints: ['./src/index.js'],
     // Allow external font files which live in ../../static/fonts
-    external: ['*.woff', '*.woff2', '*.jpg', '*.svg', '../../assets*'],
+    external: ['*.woff', '*.woff2', '*.jpg', '*.svg', '../../assets*', '@patternfly/react-icons/dist/esm/icons/pen-to-square-icon'],
     // Move all legal comments to a .LEGAL.txt file
     legalComments: 'external',
-    loader: { ".js": "jsx", ".py": "text" },
+    loader: { ".js": "jsx", ".py": "text", ".ttf": "file" },
     minify: production,
     nodePaths,
     outdir,

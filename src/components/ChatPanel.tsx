@@ -1,24 +1,20 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useState, useEffect, useRef } from 'react';
-import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
-import { Card, CardBody, CardTitle, CardFooter } from "@patternfly/react-core/dist/esm/components/Card/index.js";
-import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/index.js";
-import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
-import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
+import Chatbot, { ChatbotDisplayMode } from '@patternfly/chatbot/dist/dynamic/Chatbot';
+import ChatbotContent from '@patternfly/chatbot/dist/dynamic/ChatbotContent';
+import ChatbotFooter from '@patternfly/chatbot/dist/dynamic/ChatbotFooter';
+import MessageBox from '@patternfly/chatbot/dist/dynamic/MessageBox';
+import Message from '@patternfly/chatbot/dist/dynamic/Message';
+import MessageBar from '@patternfly/chatbot/dist/dynamic/MessageBar';
+import ToolCall from '@patternfly/chatbot/dist/dynamic/ToolCall';
+import ToolResponse from '@patternfly/chatbot/dist/dynamic/ToolResponse';
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { ExpandableSection } from "@patternfly/react-core/dist/esm/components/ExpandableSection/index.js";
-import { RobotIcon, UserIcon, WrenchIcon, CheckCircleIcon, TimesCircleIcon, PaperPlaneIcon } from '@patternfly/react-icons';
-import { marked } from 'marked';
-import { ChatMessage, ToolCall } from "../lib/types.js";
+import { RobotIcon } from '@patternfly/react-icons';
+import { ChatMessage } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
 import { _ } from "../lib/i18n.js";
 
-// Helper to render markdown safely
-const Markdown = ({ content }: { content: string }) => {
-    // Safe check if content is undefined/null
-    const html = marked.parse(content || "");
-    return <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html as string }} />;
-};
+import "@patternfly/chatbot/dist/css/main.css";
 
 interface ChatPanelProps {
     agent: Agent;
@@ -27,208 +23,102 @@ interface ChatPanelProps {
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcessing }) => {
-    const [input, setInput] = useState("");
     const bottomRef = useRef<HTMLDivElement>(null);
 
+    // Scroll to bottom when messages change
     useEffect(() => {
-        // Scroll to bottom
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        if (messages.length > 0 || agent.pendingApprovals.length > 0) {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages, agent.pendingApprovals, isProcessing]);
 
-    const handleSubmit = async () => {
-        if (!input.trim()) return;
-        const text = input;
-        setInput("");
-        // isProcessing is handled by parent or agent state
-        await agent.addUserMessage(text);
+    const handleSendMessage = async (message: string) => {
+        if (!message.trim()) return;
+        await agent.addUserMessage(message);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        // Prevent submission if user is actively composing text via IME (e.g. Japanese/Chinese)
-        if (e.nativeEvent.isComposing) {
-            return;
-        }
+    const hasPendingApprovals = agent.pendingApprovals.length > 0;
 
-        // Only submit on Enter without Shift.
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit();
-        }
-    };
+    return (
+        <Chatbot displayMode={ChatbotDisplayMode.embedded}>
+            <ChatbotContent>
+                {messages.length === 0 ? (
+                    <EmptyState>
+                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                            <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
+                            <h4 className="pf-v6-c-title pf-m-lg">{_("Cockpit Copilot")}</h4>
+                        </div>
+                        <EmptyStateBody>
+                            {_("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.")}
+                        </EmptyStateBody>
+                    </EmptyState>
+                ) : (
+                    <MessageBox>
+                        {messages.map((msg) => {
+                            if (msg.role === 'tool') {
+                                const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
+                                return (
+                                    <ToolResponse
+                                        key={msg.id}
+                                        toggleContent={<>{_("Tool Calling")}: <strong>{toolName}</strong></>}
+                                        body={(
+                                            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                                                {msg.content || msg.toolResult?.output || ""}
+                                            </pre>
+                                        )}
+                                        isBodyMarkdown={false}
+                                        isDefaultExpanded={false}
+                                    />
+                                );
+                            }
 
-    // Determine waiting state from agent
-    const waitingForApproval = agent.waitingForApproval;
+                            return (
+                                <Message
+                                    key={msg.id}
+                                    role={msg.role === 'user' ? 'user' : 'bot'}
+                                    content={msg.content}
+                                    name={msg.role === 'user' ? _("You") : _("Copilot")}
+                                />
+                            );
+                        })}
 
-    const renderMessage = (msg: ChatMessage, index: number) => {
-        const isUser = msg.role === "user";
-        const isTool = msg.role === "tool";
+                        {/* Pending Approvals */}
+                        {agent.pendingApprovals.map((approval) => (
+                             <ToolCall
+                                key={approval.toolCall.id}
+                                titleText={`${_("Tool Approval Required")}: ${agent.getToolDisplayName(approval.toolCall.function.name)}`}
+                                runButtonText={_("Approve & Run")}
+                                cancelButtonText={_("Reject")}
+                                runButtonProps={{
+                                    onClick: () => agent.approveToolCall(approval.toolCall.id)
+                                }}
+                                cancelButtonProps={{
+                                    onClick: () => agent.rejectToolCall(approval.toolCall.id)
+                                }}
+                                expandableContent={
+                                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                                        {JSON.stringify(JSON.parse(approval.toolCall.function.arguments), null, 2)}
+                                    </pre>
+                                }
+                                isDefaultExpanded
+                            />
+                        ))}
 
-        if (isTool) {
-            const followedByAssistant = messages.slice(index + 1).some(m => m.role === "assistant");
-            return (
-                <ToolOutput
-                    key={msg.id}
-                    agent={agent}
-                    msg={msg}
-                    autoCollapse={isProcessing || followedByAssistant}
+                        {isProcessing && !hasPendingApprovals && (
+                             <Message role="bot" isLoading loadingWord={_("Thinking...")} />
+                        )}
+                        <div ref={bottomRef} />
+                    </MessageBox>
+                )}
+            </ChatbotContent>
+            <ChatbotFooter>
+                <MessageBar
+                    onSendMessage={(msg) => handleSendMessage(String(msg))}
+                    placeholder={_("Type a command or ask a question...")}
+                    isSendButtonDisabled={isProcessing || hasPendingApprovals}
+                    hasAttachButton={false} // Disable attachments for now as logic isn't ported
                 />
-            );
-        }
-
-        return (
-            <div
-                key={msg.id} className="pf-v6-u-mb-lg"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: isUser ? 'flex-end' : 'flex-start'
-                }}
-            >
-
-                <div style={{
-                    background: isUser ? 'var(--pf-v6-global--BackgroundColor--light-200)' : 'var(--pf-v6-global--BackgroundColor--100)',
-                    border: isUser ? 'none' : '1px solid var(--pf-v6-global--BorderColor--100)',
-                    color: 'var(--pf-v6-global--Color--100)',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    maxWidth: '85%'
-                }}
-                >
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem', opacity: 0.7 }}>
-                        {isUser ? <UserIcon style={{ marginRight: '0.5rem' }} /> : <RobotIcon style={{ marginRight: '0.5rem' }} />}
-                        <strong>{isUser ? _("You") : _("Copilot")}</strong>
-                    </div>
-                    <Markdown content={msg.content} />
-                </div>
-            </div>
-        );
-    };
-
-    const content = messages.length === 0
-        ? (
-            <EmptyState>
-                <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                    <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
-                    <h4 className="pf-v6-c-title pf-m-lg">{_("Cockpit Copilot")}</h4>
-                </div>
-                <EmptyStateBody>
-                    {_("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.")}
-                </EmptyStateBody>
-            </EmptyState>
-        )
-        : (
-            messages.map((msg, idx) => renderMessage(msg, idx))
-        );
-
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', background: 'var(--pf-v6-global--BackgroundColor--light-100)' }}>
-            {/* Messages Area */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', paddingBottom: '100px' }}>
-                {content}
-
-                {waitingForApproval && waitingForApproval.toolCall && (
-                    <div className="pf-v6-u-mb-lg pf-v6-u-p-md" style={{ margin: '1rem auto', maxWidth: '600px' }}>
-                        <ToolApprovalCard
-                            agent={agent}
-                            toolCall={waitingForApproval.toolCall}
-                            onApprove={() => agent.approveToolCall(waitingForApproval.toolCall.id)}
-                            onReject={() => agent.rejectToolCall(waitingForApproval.toolCall.id)}
-                        />
-                    </div>
-                )}
-
-                {isProcessing && !waitingForApproval && (
-                    <div style={{ padding: '1rem', opacity: 0.6, fontStyle: 'italic' }}>
-                        <Spinner size="md" /> {_("Thinking...")}
-                    </div>
-                )}
-                <div ref={bottomRef} />
-            </div>
-
-            {/* Input Area */}
-            <div style={{ padding: '1rem', borderTop: '1px solid var(--pf-v6-global--BorderColor--100)', background: 'var(--pf-v6-global--BackgroundColor--100)' }}>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <TextArea
-                        value={input}
-                        onChange={(_e, val) => setInput(val)}
-                        onKeyDown={handleKeyDown}
-                        placeholder={_("Type a command or ask a question...")}
-                        autoResize
-                        style={{ minHeight: '50px', maxHeight: '150px', width: '100%' }}
-                    />
-                    {/* TODO: center send button icon */}
-                    <Button
-                        variant="primary"
-                        onClick={handleSubmit}
-                        isDisabled={isProcessing || waitingForApproval !== null || !input.trim()}
-                        aria-label={_("Send")}
-                        style={{ alignSelf: 'center' }}
-                    >
-                        <PaperPlaneIcon style={{ alignSelf: 'center' }} />
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-interface ToolOutputProps {
-    agent: Agent;
-    msg: ChatMessage;
-    autoCollapse?: boolean;
-}
-
-const ToolOutput: React.FC<ToolOutputProps> = ({ agent, msg, autoCollapse }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
-
-    useEffect(() => {
-        if (autoCollapse) {
-            setIsExpanded(false);
-        }
-    }, [autoCollapse]);
-
-    const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
-
-    return (
-        <ExpandableSection
-            toggleContent={
-                <Label color="blue" icon={<WrenchIcon />}>
-                    {_("Tool Call")}: <strong>{toolName}</strong>
-                </Label>
-            }
-            isExpanded={isExpanded}
-            onToggle={(_event, expanded) => setIsExpanded(expanded)}
-        >
-            <pre style={{ fontSize: '0.8rem', background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', marginTop: '0.5rem', overflowX: 'auto', border: '1px solid var(--pf-v6-global--BorderColor--100)', borderRadius: '4px' }}>
-                {msg.content || (msg.toolResult ? msg.toolResult.output : "")}
-            </pre>
-        </ExpandableSection>
-    );
-};
-
-interface ToolApprovalCardProps {
-    agent: Agent;
-    toolCall: ToolCall;
-    onApprove: () => void;
-    onReject: () => void;
-}
-
-const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({ agent, toolCall, onApprove, onReject }) => {
-    return (
-        <Card isCompact className="tool-approval-card" style={{ border: '2px solid #0066cc' }}>
-            <CardTitle><WrenchIcon /> {_("Tool Approval Required")}</CardTitle>
-            <CardBody>
-                <p>{_("The agent wants to execute:")} <strong>{agent.getToolDisplayName(toolCall.function.name)}</strong></p>
-                <div style={{ background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', border: '1px solid var(--pf-v6-global--BorderColor--100)', marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto' }}>
-                    <pre>{JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}</pre>
-                </div>
-            </CardBody>
-            <CardFooter>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <Button variant="primary" icon={<CheckCircleIcon />} onClick={onApprove}>{_("Approve & Run")}</Button>
-                    <Button variant="danger" icon={<TimesCircleIcon />} onClick={onReject}>{_("Reject")}</Button>
-                </div>
-            </CardFooter>
-        </Card>
+            </ChatbotFooter>
+        </Chatbot>
     );
 };

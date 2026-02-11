@@ -26,11 +26,11 @@ export class Agent {
     public isProcessing: boolean = false;
     private toolMetadata: Map<string, McpTool> = new Map();
 
-    public waitingForApproval: {
+    public pendingApprovals: {
         toolCall: ToolCall,
         resolve: (value: boolean) => void,
         reject: (reason?: unknown) => void
-    } | null = null;
+    }[] = [];
 
     constructor(settings: CopilotSettings, mcpManager: McpClientManager, onUpdate: UpdateCallback) {
         this.settings = settings;
@@ -106,18 +106,23 @@ RULES:
     }
 
     // Resume loop after approval
-    async approveToolCall(toolCallId: string) {
-        if (this.waitingForApproval && this.waitingForApproval.toolCall.id === toolCallId) {
-            this.waitingForApproval.resolve(true);
-            this.waitingForApproval = null;
-            // The loop is already running (awaiting the promise), so it continues automatically
+    public approveToolCall(toolCallId: string) {
+        const index = this.pendingApprovals.findIndex(p => p.toolCall.id === toolCallId);
+        if (index !== -1) {
+            const approval = this.pendingApprovals[index];
+            this.pendingApprovals.splice(index, 1);
+            approval.resolve(true);
+            this.onUpdate(this.messages);
         }
     }
 
-    async rejectToolCall(toolCallId: string) {
-        if (this.waitingForApproval && this.waitingForApproval.toolCall.id === toolCallId) {
-            this.waitingForApproval.resolve(false);
-            this.waitingForApproval = null;
+    public rejectToolCall(toolCallId: string) {
+        const index = this.pendingApprovals.findIndex(p => p.toolCall.id === toolCallId);
+        if (index !== -1) {
+            const approval = this.pendingApprovals[index];
+            this.pendingApprovals.splice(index, 1);
+            approval.resolve(false);
+            this.onUpdate(this.messages);
         }
     }
 
@@ -168,26 +173,26 @@ RULES:
 
             // Handle Tool Calls
             if (response.toolCalls && response.toolCalls.length > 0) {
-                for (const call of response.toolCalls) {
+                // Prepare all tool calls for approval
+                const toolPromises = response.toolCalls.map(async (call) => {
                     const toolName = call.function.name;
                     const toolArgs = safeJsonParse(call.function.arguments);
 
-                    // Ask for approval
+                    // Ask for approval (pauses this specific tool execution)
                     const approved = await new Promise<boolean>((resolve, reject) => {
-                        this.waitingForApproval = { toolCall: call, resolve, reject };
-                        this.onUpdate(this.messages); // Trigger UI to show approval button
+                        this.pendingApprovals.push({ toolCall: call, resolve, reject });
+                        this.onUpdate(this.messages);
                     });
 
                     let resultOutput = "";
                     if (approved) {
                         try {
                             // EXECUTE TOOL
-                            // We use the tool definition found earlier to route to the correct server
                             const toolDef = tools.find((t: any) => t.tool.name === toolName);
                             if (toolDef) {
                                 resultOutput = await this.mcpManager.callTool(toolDef.serverId, toolDef.originalName, toolArgs);
                             } else {
-                                resultOutput = "Error: Tool not found.";
+                                resultOutput = `Error: Tool '${toolName}' not found.`;
                             }
                         } catch (e) {
                             resultOutput = `Error executing tool: ${e}`;
@@ -196,10 +201,9 @@ RULES:
                         resultOutput = "User rejected tool execution.";
                     }
 
-                    // Append Result
-                    const resultMsg: ChatMessage = {
+                    return {
                         id: crypto.randomUUID(),
-                        role: "tool",
+                        role: "tool" as const,
                         content: resultOutput,
                         toolResult: {
                             toolCallId: call.id,
@@ -207,12 +211,16 @@ RULES:
                             name: toolName
                         }
                     };
+                });
 
-                    this.messages = [...this.messages, resultMsg];
-                    this.onUpdate(this.messages);
-                }
+                // Wait for all tools to be processed (approved/executed or rejected)
+                const resultMessages = await Promise.all(toolPromises);
+                
+                // Append all results to history
+                this.messages = [...this.messages, ...resultMessages];
+                this.onUpdate(this.messages);
 
-                // Recursively run loop again to let LLM see results and comment
+                // Recurse to handle any follow-up reasoning
                 await this.runLoop();
             }
         } catch (e) {
