@@ -46,7 +46,9 @@ export class LlmClient {
                 return {
                     role: "tool",
                     tool_call_id: msg.toolResult?.toolCallId,
-                    content: msg.toolResult?.output || ""
+                    content: msg.toolResult?.output || "",
+                    // @ts-ignore
+                    name: msg.toolResult?.name
                 };
             }
             if (msg.role === "assistant" && msg.toolCalls) {
@@ -59,7 +61,9 @@ export class LlmClient {
                         function: {
                             name: tc.function.name,
                             arguments: tc.function.arguments
-                        }
+                        },
+                        // @ts-ignore: Gemini extra content
+                        ...(tc.extra_content ? { extra_content: tc.extra_content } : {})
                     }))
                 };
             }
@@ -86,13 +90,14 @@ export class LlmClient {
                 model: this.model,
                 messages: openAiMessages as unknown as [],
                 tools: openAiTools as unknown as [],
-                stream: true
+                stream: true,
             });
 
             interface PartialToolCall {
                 id: string;
                 name: string;
                 args: string;
+                extraContent?: any;
             }
 
             let fullContent = "";
@@ -117,6 +122,11 @@ export class LlmClient {
                             if (tc.id) current.id = tc.id;
                             if (tc.function?.name) current.name = tc.function.name;
                             if (tc.function?.arguments) current.args += tc.function.arguments;
+                            // @ts-ignore
+                            if (tc.extra_content) {
+                                // @ts-ignore
+                                current.extraContent = tc.extra_content;
+                            }
                         }
                     }
                 }
@@ -127,7 +137,8 @@ export class LlmClient {
                 function: {
                     name: tc.name,
                     arguments: tc.args
-                }
+                },
+                extra_content: tc.extraContent
             }));
 
             const id = `msg_${Date.now()}`;

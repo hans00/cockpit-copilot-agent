@@ -1,5 +1,5 @@
 import cockpit from "cockpit";
-import { ChatMessage, CopilotSettings, ToolCall } from "./types.js";
+import { ChatMessage, CopilotSettings, ToolCall, McpTool } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { McpClientManager } from "./mcp-client.js";
 import { getSystemContext } from "./system-context.js";
@@ -23,6 +23,8 @@ export class Agent {
     private messages: ChatMessage[] = [];
     private onUpdate: UpdateCallback;
     private systemContext: string = "";
+    public isProcessing: boolean = false;
+    private toolMetadata: Map<string, McpTool> = new Map();
 
     public waitingForApproval: {
         toolCall: ToolCall,
@@ -129,6 +131,18 @@ RULES:
         const tools = await this.mcpManager.listAllTools();
         const llmTools = tools.map((t: any) => t.tool);
 
+        // Cache tool metadata for UI names
+        for (const t of tools) {
+            this.toolMetadata.set(t.tool.name, t.tool);
+        }
+
+        // Reset processing state before starting LLM to ensure transition
+        this.isProcessing = false;
+        this.onUpdate(this.messages);
+        
+        this.isProcessing = true;
+        this.onUpdate(this.messages);
+
         try {
             // Placeholder for streaming response
             let partialContent = "";
@@ -144,6 +158,9 @@ RULES:
                 streamingMessage.content = partialContent;
                 this.onUpdate([...this.messages, streamingMessage]);
             });
+
+            this.isProcessing = false;
+            this.onUpdate(this.messages);
 
             // Add Assistant response
             this.messages = [...this.messages, response];
@@ -186,7 +203,8 @@ RULES:
                         content: resultOutput,
                         toolResult: {
                             toolCallId: call.id,
-                            output: resultOutput
+                            output: resultOutput,
+                            name: toolName
                         }
                     };
 
@@ -206,6 +224,24 @@ RULES:
             };
             this.messages = [...this.messages, errMsg];
             this.onUpdate(this.messages);
+        } finally {
+            this.isProcessing = false;
+            this.onUpdate(this.messages);
         }
+    }
+
+    public getToolDisplayName(fullName: string): string {
+        const metadata = this.toolMetadata.get(fullName);
+        if (metadata?.description) {
+            // Use the first line of description if it exists
+            return metadata.description.split('\n')[0];
+        }
+
+        // Fallback: Clean up raw name
+        const namePart = fullName.split("__").pop() || fullName;
+        return namePart
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
     }
 }

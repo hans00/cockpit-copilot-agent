@@ -6,6 +6,7 @@ import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/in
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
+import { ExpandableSection } from "@patternfly/react-core/dist/esm/components/ExpandableSection/index.js";
 import { RobotIcon, UserIcon, WrenchIcon, CheckCircleIcon, TimesCircleIcon, PaperPlaneIcon } from '@patternfly/react-icons';
 import { marked } from 'marked';
 import { ChatMessage, ToolCall } from "../lib/types.js";
@@ -58,18 +59,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
     // Determine waiting state from agent
     const waitingForApproval = agent.waitingForApproval;
 
-    const renderMessage = (msg: ChatMessage) => {
+    const renderMessage = (msg: ChatMessage, index: number) => {
         const isUser = msg.role === "user";
         const isTool = msg.role === "tool";
 
         if (isTool) {
+            const followedByAssistant = messages.slice(index + 1).some(m => m.role === "assistant");
             return (
-                <div key={msg.id} className="pf-v6-u-mb-md" style={{ marginLeft: '2rem', borderLeft: '3px solid var(--pf-v6-global--BorderColor--100)', paddingLeft: '1rem' }}>
-                    <Label color="blue" icon={<WrenchIcon />}>{_("Tool Output")}</Label>
-                    <pre style={{ fontSize: '0.8rem', background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', marginTop: '0.5rem', overflowX: 'auto', border: '1px solid var(--pf-v6-global--BorderColor--100)' }}>
-                        {msg.content || (msg.toolResult ? msg.toolResult.output : "")}
-                    </pre>
-                </div>
+                <ToolOutput
+                    key={msg.id}
+                    agent={agent}
+                    msg={msg}
+                    autoCollapse={isProcessing || followedByAssistant}
+                />
             );
         }
 
@@ -115,7 +117,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
             </EmptyState>
         )
         : (
-            messages.map((msg) => renderMessage(msg))
+            messages.map((msg, idx) => renderMessage(msg, idx))
         );
 
     return (
@@ -127,6 +129,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                 {waitingForApproval && waitingForApproval.toolCall && (
                     <div className="pf-v6-u-mb-lg pf-v6-u-p-md" style={{ margin: '1rem auto', maxWidth: '600px' }}>
                         <ToolApprovalCard
+                            agent={agent}
                             toolCall={waitingForApproval.toolCall}
                             onApprove={() => agent.approveToolCall(waitingForApproval.toolCall.id)}
                             onReject={() => agent.rejectToolCall(waitingForApproval.toolCall.id)}
@@ -169,18 +172,53 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
     );
 };
 
+interface ToolOutputProps {
+    agent: Agent;
+    msg: ChatMessage;
+    autoCollapse?: boolean;
+}
+
+const ToolOutput: React.FC<ToolOutputProps> = ({ agent, msg, autoCollapse }) => {
+    const [isExpanded, setIsExpanded] = useState(true);
+
+    useEffect(() => {
+        if (autoCollapse) {
+            setIsExpanded(false);
+        }
+    }, [autoCollapse]);
+
+    const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
+
+    return (
+        <ExpandableSection
+            toggleContent={
+                <Label color="blue" icon={<WrenchIcon />}>
+                    {_("Tool Call")}: <strong>{toolName}</strong>
+                </Label>
+            }
+            isExpanded={isExpanded}
+            onToggle={(_event, expanded) => setIsExpanded(expanded)}
+        >
+            <pre style={{ fontSize: '0.8rem', background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', marginTop: '0.5rem', overflowX: 'auto', border: '1px solid var(--pf-v6-global--BorderColor--100)', borderRadius: '4px' }}>
+                {msg.content || (msg.toolResult ? msg.toolResult.output : "")}
+            </pre>
+        </ExpandableSection>
+    );
+};
+
 interface ToolApprovalCardProps {
+    agent: Agent;
     toolCall: ToolCall;
     onApprove: () => void;
     onReject: () => void;
 }
 
-const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({ toolCall, onApprove, onReject }) => {
+const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({ agent, toolCall, onApprove, onReject }) => {
     return (
         <Card isCompact className="tool-approval-card" style={{ border: '2px solid #0066cc' }}>
             <CardTitle><WrenchIcon /> {_("Tool Approval Required")}</CardTitle>
             <CardBody>
-        <p>{_("The agent wants to execute:")} <strong>{toolCall.function.name}</strong></p>
+                <p>{_("The agent wants to execute:")} <strong>{agent.getToolDisplayName(toolCall.function.name)}</strong></p>
                 <div style={{ background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', border: '1px solid var(--pf-v6-global--BorderColor--100)', marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto' }}>
                     <pre>{JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}</pre>
                 </div>

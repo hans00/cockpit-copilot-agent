@@ -47,12 +47,14 @@ export interface ToolCall {
         name: string;
         arguments: string; // JSON string
     };
+    extra_content?: unknown; // For Gemini/Google extra metadata
 }
 
 export interface ToolResult {
     toolCallId: string;
     output: string;
     isError?: boolean;
+    name?: string; // tool name
 }
 
 export interface ChatMessage {

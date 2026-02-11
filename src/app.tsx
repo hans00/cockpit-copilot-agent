@@ -21,6 +21,7 @@ export const Application = () => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [isAgentInit, setIsAgentInit] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
 
@@ -59,6 +60,7 @@ export const Application = () => {
 
         const newAgent = new Agent(settings, mcpManager, (msgs) => {
             setMessages([...msgs]);
+            setIsProcessing(newAgent.isProcessing);
         });
 
         await newAgent.init();
@@ -91,7 +93,7 @@ export const Application = () => {
                         <ChatPanel
                             agent={agent}
                             messages={messages}
-                            isProcessing={false}
+                            isProcessing={isProcessing}
                         />
                     )
                     : (
