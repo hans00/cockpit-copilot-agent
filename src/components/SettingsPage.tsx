@@ -61,7 +61,25 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false 
                 <FormGroup label={_("Provider")} fieldId="provider">
                     <FormSelect
                         value={settings.llm.provider}
-                        onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, provider: val as any } })} // eslint-disable-line @typescript-eslint/no-explicit-any
+                        onChange={(_e, val) => {
+                            const provider = val as any;
+                            let baseUrl = settings.llm.baseUrl;
+                            if (provider === "gemini") {
+                                baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+                            } else if (provider === "anthropic") {
+                                baseUrl = "https://api.anthropic.com/v1";
+                            } else if (provider === "openai") {
+                                baseUrl = "https://api.openai.com/v1";
+                            } else if (provider === "openrouter") {
+                                baseUrl = "https://openrouter.ai/api/v1";
+                            } else if (provider === "ollama") {
+                                baseUrl = "http://localhost:11434/v1";
+                            }
+                            setSettings({
+                                ...settings,
+                                llm: { ...settings.llm, provider, baseUrl }
+                            });
+                        }}
                         id="provider"
                         isDisabled={!isAdmin}
                         aria-label={_("Select LLM Provider")}
@@ -131,7 +149,7 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false 
                 {isAdmin && (
                     <ActionGroup>
                         <Button variant="primary" onClick={handleSave}>{_("Save Settings")}</Button>
-                        <Button variant="link" onClick={loadData}>{_("Cancel")}</Button>
+                        <Button variant="link" onClick={loadData}>{_("Reset")}</Button>
                     </ActionGroup>
                 )}
             </Form>
