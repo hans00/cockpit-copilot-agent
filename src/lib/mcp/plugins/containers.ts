@@ -223,10 +223,7 @@ export class ContainerPlugin extends ToolPlugin {
                 await cockpit.spawn(["systemctl", "--user", "enable", "--now", `container-${containerName}.service`]);
             } else {
                 // root mode
-                await cockpit.spawn([
-                    "podman", "generate", "systemd", "--name", containerName,
-                    ">", `/etc/systemd/system/container-${containerName}.service`
-                ]);
+                await cockpit.script(`podman generate systemd --name ${escapeShellArg(containerName)} > ${escapeShellArg(`/etc/systemd/system/container-${containerName}.service`)}`);
                 await cockpit.spawn(["systemctl", "daemon-reload"]);
                 await cockpit.spawn(["systemctl", "enable", "--now", `container-${containerName}.service`]);
             }
