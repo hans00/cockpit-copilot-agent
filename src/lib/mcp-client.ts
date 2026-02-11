@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { McpServerConfig, McpTool } from "./types.js";
+import { LocalTransport } from "./mcp/local-transport.js";
 
 // Custom Transport for Cockpit Spawn (Stdio)
 class CockpitStdioTransport implements Transport {
@@ -31,20 +32,16 @@ class CockpitStdioTransport implements Transport {
                     environ: ["PYTHONUNBUFFERED=1"]
                 });
 
-                if (this.process) {
-                    this.process.stream((data: string) => {
-                        this.handleData(data);
-                    });
-
-                    this.process.fail((err: Error) => {
+                this.process?.stream((data: string) => {
+                    this.handleData(data);
+                })
+                    .fail((err: Error) => {
                         if (this.onerror) this.onerror(err);
                         reject(err);
-                    });
-
-                    this.process.done(() => {
+                    })
+                    .done(() => {
                         if (this.onclose) this.onclose();
                     });
-                }
 
                 resolve();
             } catch (e) {
@@ -60,10 +57,8 @@ class CockpitStdioTransport implements Transport {
     }
 
     async close(): Promise<void> {
-        if (this.process) {
-            this.process.close();
-            this.process = undefined;
-        }
+        this.process?.close?.();
+        this.process = undefined;
     }
 
     private handleData(data: string) {
@@ -99,16 +94,20 @@ interface ConnectedClient {
 export class McpClientManager {
     private clients: Map<string, ConnectedClient> = new Map();
 
-    async connectServer(config: McpServerConfig) {
+    async connectServer(config: McpServerConfig, localTransport?: LocalTransport) {
         let transport: Transport;
 
-        if (config.transport === "stdio") {
+        if (localTransport) {
+            transport = localTransport;
+        } else if (config.transport === "stdio") {
             transport = new CockpitStdioTransport(config);
         } else if (config.transport === "http") {
             if (!config.url) throw new Error("No URL specified for HTTP server");
             transport = new StreamableHTTPClientTransport(new URL(config.url)) as Transport;
+        } else if (config.transport === "local") {
+            throw new Error("Local transport requires an existing transport instance");
         } else {
-            console.warn(`Unknown transport: ${(config as any).transport} `); // eslint-disable-line @typescript-eslint/no-explicit-any
+            console.warn(`Unknown transport: ${(config as any).transport} `);
             return;
         }
 

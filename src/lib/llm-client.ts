@@ -20,7 +20,17 @@ export class LlmClient {
         this.client = new OpenAI({
             apiKey: config.apiKey || "dummy", // Ollama doesn't need key
             baseURL: config.baseUrl,
-            dangerouslyAllowBrowser: true // Running in cockpit browser context
+            dangerouslyAllowBrowser: true, // Running in cockpit browser context
+            defaultHeaders: {
+                'x-stainless-arch': null,
+                'x-stainless-lang': null,
+                'x-stainless-os': null,
+                'x-stainless-package-version': null,
+                'x-stainless-retry-count': null,
+                'x-stainless-runtime': null,
+                'x-stainless-runtime-version': null,
+                'x-stainless-timeout': null,
+            }
         });
         this.model = config.model;
     }

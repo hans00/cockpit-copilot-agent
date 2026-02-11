@@ -1,8 +1,10 @@
-/* SPDX-License-Identifier: LGPL-2.1-or-later */
+import cockpit from "cockpit";
 import { ChatMessage, CopilotSettings, ToolCall } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { McpClientManager } from "./mcp-client.js";
 import { getSystemContext } from "./system-context.js";
+import { McpServerLocal } from "./mcp/mcp-server-local.js";
+import { LocalTransport } from "./mcp/local-transport.js";
 
 type UpdateCallback = (messages: ChatMessage[]) => void;
 
@@ -42,15 +44,25 @@ export class Agent {
 
     // Initialize: load system context, connect MCP servers
     async init() {
-        // Connect to built-in server
+        // Initialize local server
+        const localServer = new McpServerLocal();
+        await localServer.init();
+
+        const clientTransport = new LocalTransport();
+        const serverTransport = new LocalTransport();
+        clientTransport.connect(serverTransport);
+
+        // Start server with its transport
+        // We need to wait for it or just start it. localServer.connect(serverTransport) is async
+        await localServer.connect(serverTransport);
+
+        // Connect to built-in local server
         await this.mcpManager.connectServer({
             id: "builtin",
             name: "System Tools",
-            transport: "stdio",
-            command: "python3",
-            args: ["-m", "mcp_server", "--permissions", "admin"], // assume admin for now, should check cockpit.user
+            transport: "local",
             enabled: true
-        });
+        }, clientTransport);
 
         // Connect custom servers from settings
         for (const s of this.settings.mcpServers) {
@@ -77,6 +89,7 @@ RULES:
 4. If a tool call fails, analyze the error and suggest a fix.
 `;
     }
+
 
     async addUserMessage(content: string) {
         const msg: ChatMessage = {
@@ -114,7 +127,7 @@ RULES:
         ];
 
         const tools = await this.mcpManager.listAllTools();
-        const llmTools = tools.map(t => t.tool);
+        const llmTools = tools.map((t: any) => t.tool);
 
         try {
             // Placeholder for streaming response
@@ -153,7 +166,7 @@ RULES:
                         try {
                             // EXECUTE TOOL
                             // We use the tool definition found earlier to route to the correct server
-                            const toolDef = tools.find(t => t.tool.name === toolName);
+                            const toolDef = tools.find((t: any) => t.tool.name === toolName);
                             if (toolDef) {
                                 resultOutput = await this.mcpManager.callTool(toolDef.serverId, toolDef.originalName, toolArgs);
                             } else {

@@ -13,7 +13,7 @@ import { CopilotSettings, DEFAULT_SETTINGS } from "../lib/types.js";
 import { McpServerList } from "./McpServerList.jsx";
 import { _ } from "../lib/i18n.js";
 
-export const SettingsPage = () => {
+export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const [settings, setSettings] = useState<CopilotSettings>(DEFAULT_SETTINGS);
     const [apiKey, setApiKey] = useState("");
     const [statusMsg, setStatusMsg] = useState<{ type: "success" | "danger", text: string } | null>(null);
@@ -30,6 +30,10 @@ export const SettingsPage = () => {
     };
 
     const handleSave = async () => {
+        if (!isAdmin) {
+            setStatusMsg({ type: "danger", text: _("You do not have permission to save settings.") });
+            return;
+        }
         try {
             await saveSettings(settings);
             await writeCredentials({
@@ -45,15 +49,13 @@ export const SettingsPage = () => {
     };
 
     return (
-        <div className="pf-v6-u-p-md" style={{ maxWidth: '800px' }}>
-            <Title headingLevel="h1" size="2xl" className="pf-v6-u-mb-lg">{_("Agent Settings")}</Title>
-
+        <div style={{ maxWidth: '800px' }}>
             {statusMsg && (
                 <Alert variant={statusMsg.type} title={statusMsg.text} className="pf-v6-u-mb-md" />
             )}
 
             <Form>
-                <Title headingLevel="h2" size="xl">{_("LLM Provider")}</Title>
+                <Title headingLevel="h2" size="lg">{_("LLM Provider")}</Title>
 
                 <FormGroup label={_("Provider")} fieldId="provider">
                     <select
@@ -61,6 +63,7 @@ export const SettingsPage = () => {
                         value={settings.llm.provider}
                         onChange={(e) => setSettings({ ...settings, llm: { ...settings.llm, provider: e.currentTarget.value as any } })} // eslint-disable-line @typescript-eslint/no-explicit-any
                         id="provider"
+                        disabled={!isAdmin}
                     >
                         <option value="ollama">{_("Ollama (Local)")}</option>
                         <option value="openai">{_("OpenAI")}</option>
@@ -71,21 +74,25 @@ export const SettingsPage = () => {
                     </select>
                 </FormGroup>
 
-                <FormGroup label={_("Base URL")} fieldId="base-url">
-                    <TextInput
-                        id="base-url"
-                        value={settings.llm.baseUrl}
-                        onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, baseUrl: val } })}
-                    />
-                </FormGroup>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <FormGroup label={_("Base URL")} fieldId="base-url">
+                        <TextInput
+                            id="base-url"
+                            value={settings.llm.baseUrl}
+                            onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, baseUrl: val } })}
+                            isDisabled={!isAdmin}
+                        />
+                    </FormGroup>
 
-                <FormGroup label={_("Model Name")} fieldId="model">
-                    <TextInput
-                        id="model"
-                        value={settings.llm.model}
-                        onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, model: val } })}
-                    />
-                </FormGroup>
+                    <FormGroup label={_("Model Name")} fieldId="model">
+                        <TextInput
+                            id="model"
+                            value={settings.llm.model}
+                            onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, model: val } })}
+                            isDisabled={!isAdmin}
+                        />
+                    </FormGroup>
+                </div>
 
                 <FormGroup label={_("API Key")} fieldId="api-key">
                     <TextInput
@@ -94,12 +101,13 @@ export const SettingsPage = () => {
                         value={apiKey}
                         onChange={(_e, val) => setApiKey(val)}
                         placeholder="sk-..."
+                        isDisabled={!isAdmin}
                     />
                 </FormGroup>
 
-                <div className="pf-v6-u-my-lg" />
+                <div className="pf-v6-u-my-md" />
 
-                <Title headingLevel="h2" size="xl">{_("System Context")}</Title>
+                <Title headingLevel="h2" size="lg">{_("System Context")}</Title>
                 <FormGroup label={_("Custom System Prompt")} fieldId="sys-prompt">
                     <TextArea
                         id="sys-prompt"
@@ -107,20 +115,24 @@ export const SettingsPage = () => {
                         onChange={(_e, val) => setSettings({ ...settings, customSystemPrompt: val })}
                         rows={4}
                         placeholder={_("Describe this system (e.g. 'Production Web Server') to give the agent context.")}
+                        isDisabled={!isAdmin}
                     />
                 </FormGroup>
 
-                <div className="pf-v6-u-my-lg" />
+                <div className="pf-v6-u-my-md" />
 
                 <McpServerList
                     servers={settings.mcpServers}
                     onUpdate={(servers) => setSettings({ ...settings, mcpServers: servers })}
+                    readOnly={!isAdmin}
                 />
 
-                <ActionGroup>
-                    <Button variant="primary" onClick={handleSave}>{_("Save Settings")}</Button>
-                    <Button variant="link" onClick={loadData}>{_("Cancel")}</Button>
-                </ActionGroup>
+                {isAdmin && (
+                    <ActionGroup>
+                        <Button variant="primary" onClick={handleSave}>{_("Save Settings")}</Button>
+                        <Button variant="link" onClick={loadData}>{_("Cancel")}</Button>
+                    </ActionGroup>
+                )}
             </Form>
         </div>
     );

@@ -5,6 +5,7 @@ import { DataList, DataListItem, DataListItemRow, DataListItemCells, DataListCel
 import { Modal, ModalVariant, ModalHeader, ModalBody, ModalFooter } from "@patternfly/react-core/dist/esm/components/Modal/index.js";
 import { Form, FormGroup } from "@patternfly/react-core/dist/esm/components/Form/index.js";
 import { TextInput } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
+import { Title } from "@patternfly/react-core/dist/esm/components/Title/index.js";
 import { McpServerConfig } from "../lib/types.js";
 import { PlusCircleIcon, TrashIcon } from '@patternfly/react-icons';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,15 +14,17 @@ import { _ } from "../lib/i18n.js";
 interface McpServerListProps {
     servers: McpServerConfig[];
     onUpdate: (servers: McpServerConfig[]) => void;
+    readOnly?: boolean;
 }
 
-export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate }) => {
+export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate, readOnly = false }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newServerName, setNewServerName] = useState("");
     const [newServerCommand, setNewServerCommand] = useState("");
     const [newServerArgs, setNewServerArgs] = useState("");
 
     const handleAdd = () => {
+        if (readOnly) return;
         const args = newServerArgs.split(" ").filter(s => s.trim().length > 0);
         const newServer: McpServerConfig = {
             id: uuidv4(),
@@ -39,6 +42,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate 
     };
 
     const handleRemove = (id: string) => {
+        if (readOnly) return;
         onUpdate(servers.filter(s => s.id !== id));
     };
 
@@ -52,16 +56,18 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate 
     return (
         <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3>{_("Custom MCP Servers")}</h3>
-                <Button variant="secondary" icon={<PlusCircleIcon />} onClick={() => setIsModalOpen(true)}>
-                    {_("Add Server")}
-                </Button>
+                <Title headingLevel="h3" size="lg">{_("Custom MCP Servers")}</Title>
+                {!readOnly && (
+                    <Button variant="secondary" icon={<PlusCircleIcon />} onClick={() => setIsModalOpen(true)}>
+                        {_("Add Server")}
+                    </Button>
+                )}
             </div>
 
             <DataList aria-label={_("MCP Servers")}>
                 {servers.map(server => (
                     <DataListItem key={server.id}>
-                        <DataListItemRow>
+                        <DataListItemRow style={{ alignItems: 'center' }}>
                             <DataListItemCells
                                 dataListCells={[
                                     <DataListCell key="name">
@@ -72,9 +78,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate 
                                     </DataListCell>
                                 ]}
                             />
-                            <DataListAction aria-labelledby="remove-server" id="remove-server" aria-label={_("Remove")}>
-                                <Button variant="link" icon={<TrashIcon />} onClick={() => handleRemove(server.id)} />
-                            </DataListAction>
+                            {!readOnly && (
+                                <DataListAction aria-labelledby="remove-server" id="remove-server" aria-label={_("Remove")}>
+                                    <Button variant="link" icon={<TrashIcon />} onClick={() => handleRemove(server.id)} />
+                                </DataListAction>
+                            )}
                         </DataListItemRow>
                     </DataListItem>
                 ))}

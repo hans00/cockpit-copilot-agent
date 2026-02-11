@@ -64,9 +64,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
 
         if (isTool) {
             return (
-                <div key={msg.id} className="pf-v6-u-mb-md" style={{ marginLeft: '2rem', borderLeft: '3px solid #eee', paddingLeft: '1rem' }}>
+                <div key={msg.id} className="pf-v6-u-mb-md" style={{ marginLeft: '2rem', borderLeft: '3px solid var(--pf-v6-global--BorderColor--100)', paddingLeft: '1rem' }}>
                     <Label color="blue" icon={<WrenchIcon />}>{_("Tool Output")}</Label>
-                    <pre style={{ fontSize: '0.8rem', background: '#f5f5f5', padding: '0.5rem', marginTop: '0.5rem', overflowX: 'auto' }}>
+                    <pre style={{ fontSize: '0.8rem', background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', marginTop: '0.5rem', overflowX: 'auto', border: '1px solid var(--pf-v6-global--BorderColor--100)' }}>
                         {msg.content || (msg.toolResult ? msg.toolResult.output : "")}
                     </pre>
                 </div>
@@ -84,8 +84,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
             >
 
                 <div style={{
-                    background: isUser ? '#f0f0f0' : '#fff',
-                    border: isUser ? 'none' : '1px solid #ddd',
+                    background: isUser ? 'var(--pf-v6-global--BackgroundColor--light-200)' : 'var(--pf-v6-global--BackgroundColor--100)',
+                    border: isUser ? 'none' : '1px solid var(--pf-v6-global--BorderColor--100)',
+                    color: 'var(--pf-v6-global--Color--100)',
                     borderRadius: '8px',
                     padding: '1rem',
                     maxWidth: '85%'
@@ -105,7 +106,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
         ? (
             <EmptyState>
                 <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                    <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: '#6a6e73' }} />
+                    <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
                     <h4 className="pf-v6-c-title pf-m-lg">{_("Cockpit Copilot")}</h4>
                 </div>
                 <EmptyStateBody>
@@ -118,7 +119,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
         );
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', background: 'var(--pf-v6-global--BackgroundColor--light-100)' }}>
             {/* Messages Area */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', paddingBottom: '100px' }}>
                 {content}
@@ -142,7 +143,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
             </div>
 
             {/* Input Area */}
-            <div style={{ padding: '1rem', borderTop: '1px solid #eee', background: '#fff' }}>
+            <div style={{ padding: '1rem', borderTop: '1px solid var(--pf-v6-global--BorderColor--100)', background: 'var(--pf-v6-global--BackgroundColor--100)' }}>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <TextArea
                         value={input}
@@ -152,8 +153,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                         autoResize
                         style={{ minHeight: '50px', maxHeight: '150px', width: '100%' }}
                     />
-                    <Button variant="primary" onClick={handleSubmit} isDisabled={isProcessing || waitingForApproval !== null || !input.trim()} aria-label={_("Send")}>
-                        <PaperPlaneIcon />
+                    {/* TODO: center send button icon */}
+                    <Button
+                        variant="primary"
+                        onClick={handleSubmit}
+                        isDisabled={isProcessing || waitingForApproval !== null || !input.trim()}
+                        aria-label={_("Send")}
+                        style={{ alignSelf: 'center' }}
+                    >
+                        <PaperPlaneIcon style={{ alignSelf: 'center' }} />
                     </Button>
                 </div>
             </div>
@@ -172,8 +180,8 @@ const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({ toolCall, onApprove
         <Card isCompact className="tool-approval-card" style={{ border: '2px solid #0066cc' }}>
             <CardTitle><WrenchIcon /> {_("Tool Approval Required")}</CardTitle>
             <CardBody>
-                <p>{_("The agent wants to execute:")} <strong>{toolCall.function.name}</strong></p>
-                <div style={{ background: '#f5f5f5', padding: '0.5rem', border: '1px solid #ccc', marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto' }}>
+        <p>{_("The agent wants to execute:")} <strong>{toolCall.function.name}</strong></p>
+                <div style={{ background: 'var(--pf-v6-global--BackgroundColor--light-200)', color: 'var(--pf-v6-global--Color--100)', padding: '0.5rem', border: '1px solid var(--pf-v6-global--BorderColor--100)', marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto' }}>
                     <pre>{JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}</pre>
                 </div>
             </CardBody>

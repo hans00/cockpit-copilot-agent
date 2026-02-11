@@ -12,7 +12,7 @@ export interface McpTool {
 export interface McpServerConfig {
     id: string; // uuid
     name: string; // e.g. "My DB Tools"
-    transport: "stdio" | "http";
+    transport: "stdio" | "http" | "local";
     command?: string; // for stdio: e.g. "python3"
     args?: string[]; // for stdio: e.g. ["/opt/my-tools/server.py"]
     url?: string; // for http: e.g. "http://localhost:3000/sse"
