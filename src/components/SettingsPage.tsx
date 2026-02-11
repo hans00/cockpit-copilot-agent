@@ -6,6 +6,7 @@ import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/in
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
 import { Title } from "@patternfly/react-core/dist/esm/components/Title/index.js";
+import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/components/FormSelect/index.js";
 
 import { loadSettings, saveSettings } from "../lib/settings.js";
 import { readCredentials, writeCredentials } from "../lib/credentials.js";
@@ -58,20 +59,20 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false 
                 <Title headingLevel="h2" size="lg">{_("LLM Provider")}</Title>
 
                 <FormGroup label={_("Provider")} fieldId="provider">
-                    <select
-                        className="pf-v6-c-form-control"
+                    <FormSelect
                         value={settings.llm.provider}
-                        onChange={(e) => setSettings({ ...settings, llm: { ...settings.llm, provider: e.currentTarget.value as any } })} // eslint-disable-line @typescript-eslint/no-explicit-any
+                        onChange={(_e, val) => setSettings({ ...settings, llm: { ...settings.llm, provider: val as any } })} // eslint-disable-line @typescript-eslint/no-explicit-any
                         id="provider"
-                        disabled={!isAdmin}
+                        isDisabled={!isAdmin}
+                        aria-label={_("Select LLM Provider")}
                     >
-                        <option value="ollama">{_("Ollama (Local)")}</option>
-                        <option value="openai">{_("OpenAI")}</option>
-                        <option value="gemini">{_("Gemini")}</option>
-                        <option value="anthropic">{_("Anthropic")}</option>
-                        <option value="openrouter">{_("OpenRouter")}</option>
-                        <option value="custom">{_("Custom (OpenAI Compatible)")}</option>
-                    </select>
+                        <FormSelectOption value="ollama" label={_("Ollama (Local)")} />
+                        <FormSelectOption value="openai" label={_("OpenAI")} />
+                        <FormSelectOption value="gemini" label={_("Gemini")} />
+                        <FormSelectOption value="anthropic" label={_("Anthropic")} />
+                        <FormSelectOption value="openrouter" label={_("OpenRouter")} />
+                        <FormSelectOption value="custom" label={_("Custom (OpenAI Compatible)")} />
+                    </FormSelect>
                 </FormGroup>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
