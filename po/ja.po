@@ -1,0 +1,239 @@
+# #-#-#-#-#  cockpit-copilot-agent.metainfo.pot (PACKAGE_VERSION VERSION)  #-#-#-#-#
+# Japanese translations for PACKAGE_VERSION package.
+# Copyright (C) 2026 THE PACKAGE_VERSION'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE_VERSION package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"#-#-#-#-#  cockpit-copilot-agent.html.pot (PACKAGE_VERSION)  #-#-#-#-#\n"
+"Project-Id-Version: PACKAGE_VERSION\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Cockpit html2po\n"
+"#-#-#-#-#  cockpit-copilot-agent.manifest.pot (PACKAGE_VERSION)  #-#-#-#-#\n"
+"Project-Id-Version: PACKAGE_VERSION\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Cockpit manifest2po\n"
+"#-#-#-#-#  cockpit-copilot-agent.metainfo.pot (PACKAGE VERSION)  #-#-#-#-#\n"
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-02-11 22:52+0800\n"
+"PO-Revision-Date: 2026-02-11 22:52+0800\n"
+"Last-Translator: Hans <me@hans00.me>\n"
+"Language-Team: none\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:6
+msgid "AI System Assistant"
+msgstr "AI システムアシスタント"
+
+#: src/components/SettingsPage.tsx:84
+msgid "API Key"
+msgstr "API キー"
+
+#: src/components/McpServerList.tsx:42
+msgid "Add"
+msgstr "追加"
+
+#: src/components/McpServerList.tsx:96
+msgid "Add Custom MCP Server"
+msgstr "カスタム MCP サーバーを追加"
+
+#: src/components/McpServerList.tsx:52
+msgid "Add Server"
+msgstr "サーバーを追加"
+
+#: src/components/SettingsPage.tsx:43
+msgid "Agent Settings"
+msgstr "エージェント設定"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:8
+msgid "An AI Copilot Agent for Cockpit that helps manage your Linux system."
+msgstr "Cockpit で Linux システムを管理するための AI コピレットエージェント。"
+
+#: src/components/SettingsPage.tsx:62
+msgid "Anthropic"
+msgstr ""
+
+#: src/components/ChatPanel.tsx:176
+msgid "Approve & Run"
+msgstr "承認して実行"
+
+#: src/components/McpServerList.tsx:118
+msgid "Arguments"
+msgstr "引数"
+
+#: src/components/SettingsPage.tsx:68
+msgid "Base URL"
+msgstr "ベース URL"
+
+#: src/components/McpServerList.tsx:43 src/components/SettingsPage.tsx:116
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: src/app.tsx:69
+msgid "Chat"
+msgstr "チャット"
+
+#: src/app.tsx:49 src/components/ChatPanel.tsx:103
+msgid "Cockpit Copilot"
+msgstr "Cockpit Copilot"
+
+#: src/index.html:20 org.cockpit_project.cockpit_copilot_agent.metainfo.xml:5
+msgid "Cockpit Copilot Agent"
+msgstr "Cockpit Copilot エージェント"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:18
+msgid "Cockpit Project"
+msgstr ""
+
+#: src/components/McpServerList.tsx:108
+msgid "Command"
+msgstr "コマンド"
+
+#: src/components/ChatPanel.tsx:90
+msgid "Copilot"
+msgstr "コピレット"
+
+#: src/manifest.json:0
+msgid "Copilot Agent"
+msgstr "コピレットエージェント"
+
+#: src/components/SettingsPage.tsx:64
+msgid "Custom (OpenAI Compatible)"
+msgstr "カスタム（OpenAI互換）"
+
+#: src/components/McpServerList.tsx:50
+msgid "Custom MCP Servers"
+msgstr "カスタム MCP サーバー"
+
+#: src/components/SettingsPage.tsx:97
+msgid "Custom System Prompt"
+msgstr "カスタムシステムプロンプト"
+
+#: src/components/SettingsPage.tsx:103
+msgid ""
+"Describe this system (e.g. 'Production Web Server') to give the agent "
+"context."
+msgstr ""
+"このシステムを説明してください（例：'生産用 Web サーバー'）エージェントに "
+"コンテキストを与えます。"
+
+#: src/components/SettingsPage.tsx:37
+msgid "Failed to save settings: "
+msgstr "設定を保存できませんでした："
+
+#: src/components/SettingsPage.tsx:61
+msgid "Gemini"
+msgstr ""
+
+#: src/components/ChatPanel.tsx:106
+msgid ""
+"Hi! I'm your system agent using MCP. Ask me to manage services, install "
+"packages, or check system logs."
+msgstr ""
+"こんにちは！私は MCP を使用してシステムエージェントです。サービスを管理する "
+"か、パッケージをインストールするか、システムログを確認するかを私に "
+"要求してください。"
+
+#: src/app.tsx:99
+msgid "Initializing Agent..."
+msgstr "エージェントを初期化中..."
+
+#: src/components/SettingsPage.tsx:50
+msgid "LLM Provider"
+msgstr "LLM プロバイダー"
+
+#: src/components/McpServerList.tsx:56
+msgid "MCP Servers"
+msgstr "MCP サーバー"
+
+#: src/components/SettingsPage.tsx:76
+msgid "Model Name"
+msgstr "モデル名"
+
+#: src/components/McpServerList.tsx:99
+msgid "Name"
+msgstr "名前"
+
+#: src/components/McpServerList.tsx:82
+msgid ""
+"No custom servers configured. The built-in system server is always active."
+msgstr ""
+"カスタムサーバーが設定されていません。組み込みシステムサーバーは常に有効です。"
+
+#: src/components/SettingsPage.tsx:59
+msgid "Ollama (Local)"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:60
+msgid "OpenAI"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:63
+msgid "OpenRouter"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:52
+msgid "Provider"
+msgstr "プロバイダー"
+
+#: src/components/ChatPanel.tsx:177
+msgid "Reject"
+msgstr "拒否"
+
+#: src/components/McpServerList.tsx:70
+msgid "Remove"
+msgstr "削除"
+
+#: src/components/SettingsPage.tsx:115
+msgid "Save Settings"
+msgstr "設定を保存"
+
+#: src/components/ChatPanel.tsx:150
+msgid "Send"
+msgstr "送信"
+
+#: src/app.tsx:55 src/app.tsx:72
+msgid "Settings"
+msgstr "設定"
+
+#: src/components/SettingsPage.tsx:35
+msgid "Settings saved successfully."
+msgstr "設定を保存しました。"
+
+#: src/components/SettingsPage.tsx:96
+msgid "System Context"
+msgstr "システムコンテキスト"
+
+#: src/components/ChatPanel.tsx:169
+msgid "The agent wants to execute:"
+msgstr "エージェントが実行したい："
+
+#: src/components/ChatPanel.tsx:132
+msgid "Thinking..."
+msgstr "考えています..."
+
+#: src/components/ChatPanel.tsx:167
+msgid "Tool Approval Required"
+msgstr "ツール承認が必要です"
+
+#: src/components/ChatPanel.tsx:62
+msgid "Tool Output"
+msgstr "ツール出力"
+
+#: src/components/ChatPanel.tsx:145
+msgid "Type a command or ask a question..."
+msgstr "コマンドを入力または質問を提出..."
+
+#: src/components/ChatPanel.tsx:90
+msgid "You"
+msgstr "あなた"

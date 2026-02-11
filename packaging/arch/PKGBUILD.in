@@ -1,0 +1,15 @@
+pkgname=cockpit-copilot-agent
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Cockpit Copilot Agent'
+arch=('x86_64')
+url='https://github.com/hans00/cockpit-copilot-agent'
+license=(LGPL)
+source=("SOURCE")
+sha256sums=('SKIP')
+
+package() {
+  depends=(cockpit)
+  cd $pkgname
+  make DESTDIR="$pkgdir" install PREFIX=/usr
+}

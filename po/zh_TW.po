@@ -1,0 +1,216 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: cockpit-copilot-agent\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-02-11 23:14+0800\n"
+"PO-Revision-Date: 2026-02-11 23:14+0800\n"
+"Last-Translator: Hansen <hansen@example.com>\n"
+"Language-Team: none\n"
+"Language: zh_TW\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:6
+msgid "AI System Assistant"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:84
+msgid "API Key"
+msgstr ""
+
+#: src/components/McpServerList.tsx:42
+msgid "Add"
+msgstr ""
+
+#: src/components/McpServerList.tsx:96
+msgid "Add Custom MCP Server"
+msgstr ""
+
+#: src/components/McpServerList.tsx:52
+msgid "Add Server"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:43
+msgid "Agent Settings"
+msgstr "代理設定"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:8
+msgid "An AI Copilot Agent for Cockpit that helps manage your Linux system."
+msgstr ""
+
+#: src/components/SettingsPage.tsx:62
+msgid "Anthropic"
+msgstr ""
+
+#: src/components/ChatPanel.tsx:176
+msgid "Approve & Run"
+msgstr ""
+
+#: src/components/McpServerList.tsx:118
+msgid "Arguments"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:68
+msgid "Base URL"
+msgstr ""
+
+#: src/components/McpServerList.tsx:43 src/components/SettingsPage.tsx:116
+msgid "Cancel"
+msgstr ""
+
+#: src/app.tsx:69
+msgid "Chat"
+msgstr "聊天"
+
+#: src/app.tsx:49 src/components/ChatPanel.tsx:103
+msgid "Cockpit Copilot"
+msgstr "Cockpit Copilot"
+
+#: src/index.html:20 org.cockpit_project.cockpit_copilot_agent.metainfo.xml:5
+msgid "Cockpit Copilot Agent"
+msgstr "Cockpit Copilot 代理"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:18
+msgid "Cockpit Project"
+msgstr ""
+
+#: src/components/McpServerList.tsx:108
+msgid "Command"
+msgstr ""
+
+#: src/components/ChatPanel.tsx:90
+msgid "Copilot"
+msgstr ""
+
+#: src/manifest.json:0
+msgid "Copilot Agent"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:64
+msgid "Custom (OpenAI Compatible)"
+msgstr ""
+
+#: src/components/McpServerList.tsx:50
+msgid "Custom MCP Servers"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:97
+msgid "Custom System Prompt"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:103
+msgid ""
+"Describe this system (e.g. 'Production Web Server') to give the agent "
+"context."
+msgstr ""
+"描述此系統（例如 '生產 Web 伺服器'）以提供代理上下文。"
+
+#: src/components/SettingsPage.tsx:37
+msgid "Failed to save settings: "
+msgstr "儲存設定失敗："
+
+#: src/components/SettingsPage.tsx:61
+msgid "Gemini"
+msgstr ""
+
+#: src/components/ChatPanel.tsx:106
+msgid ""
+"Hi! I'm your system agent using MCP. Ask me to manage services, install "
+"packages, or check system logs."
+msgstr ""
+"嗨！我是你的系統代理。可以請我管理服務、安裝套件或檢查系統日誌。"
+
+#: src/app.tsx:99
+msgid "Initializing Agent..."
+msgstr "正在初始化代理..."
+
+#: src/components/SettingsPage.tsx:50
+msgid "LLM Provider"
+msgstr "LLM 提供商"
+
+#: src/components/McpServerList.tsx:56
+msgid "MCP Servers"
+msgstr "MCP 伺服器"
+
+#: src/components/SettingsPage.tsx:76
+msgid "Model Name"
+msgstr "模型名稱"
+
+#: src/components/McpServerList.tsx:99
+msgid "Name"
+msgstr "名稱"
+
+#: src/components/McpServerList.tsx:82
+msgid ""
+"No custom servers configured. The built-in system server is always active."
+msgstr "未設定自訂伺服器。內建系統伺服器始終有效。"
+
+#: src/components/SettingsPage.tsx:59
+msgid "Ollama (Local)"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:60
+msgid "OpenAI"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:63
+msgid "OpenRouter"
+msgstr ""
+
+#: src/components/SettingsPage.tsx:52
+msgid "Provider"
+msgstr "供應商"
+
+#: src/components/ChatPanel.tsx:177
+msgid "Reject"
+msgstr "拒絕"
+
+#: src/components/McpServerList.tsx:70
+msgid "Remove"
+msgstr "移除"
+
+#: src/components/SettingsPage.tsx:115
+msgid "Save Settings"
+msgstr "儲存設定"
+
+#: src/components/ChatPanel.tsx:150
+msgid "Send"
+msgstr "送出"
+
+#: src/app.tsx:55 src/app.tsx:72
+msgid "Settings"
+msgstr "設定"
+
+#: src/components/SettingsPage.tsx:35
+msgid "Settings saved successfully."
+msgstr "儲存設定成功。"
+
+#: src/components/SettingsPage.tsx:96
+msgid "System Context"
+msgstr "系統上下文"
+
+#: src/components/ChatPanel.tsx:169
+msgid "The agent wants to execute:"
+msgstr "代理想要執行："
+
+#: src/components/ChatPanel.tsx:132
+msgid "Thinking..."
+msgstr "思考中..."
+
+#: src/components/ChatPanel.tsx:167
+msgid "Tool Approval Required"
+msgstr "工具核准需求"
+
+#: src/components/ChatPanel.tsx:62
+msgid "Tool Output"
+msgstr "工具輸出"
+
+#: src/components/ChatPanel.tsx:145
+msgid "Type a command or ask a question..."
+msgstr "輸入命令或提出問題..."
+
+#: src/components/ChatPanel.tsx:90
+msgid "You"
+msgstr "你"

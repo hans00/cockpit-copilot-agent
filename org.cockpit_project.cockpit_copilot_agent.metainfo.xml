@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>me.hans00.cockpit_copilot_agent</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Cockpit Copilot Agent</name>
+  <summary>AI System Assistant</summary>
+  <description>
+    <p>
+      An AI Copilot Agent for Cockpit that helps manage your Linux system.
+    </p>
+  </description>
+  <extends>me.hans00.cockpit</extends>
+  <launchable type="cockpit-manifest">cockpit-copilot-agent</launchable>
+  <url type="homepage">https://github.com/hans00/cockpit-copilot-agent</url>
+  <url type="bugtracker">https://github.com/hans00/cockpit-copilot-agent/issues</url>
+  <update_contact>me_AT_hans00.me</update_contact>
+  <developer id="me.hans00">
+    <name>Hans</name>
+  </developer>
+</component>
