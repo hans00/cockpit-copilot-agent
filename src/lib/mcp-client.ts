@@ -138,7 +138,8 @@ export class McpClientManager {
                     originalName: t.name,
                     tool: {
                         name: `${serverName}__${t.name}`,
-                        description: t.description || "",
+                        title: t.title,
+                        description: t.description,
                         inputSchema: t.inputSchema
                     } as McpTool
                 })));

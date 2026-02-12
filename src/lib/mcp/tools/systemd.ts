@@ -7,9 +7,13 @@ export interface UnitInfo {
     description: string;
 }
 
-export async function listUnits(): Promise<UnitInfo[]> {
+export async function listUnits(scope: "system" | "user" = "system"): Promise<UnitInfo[]> {
     try {
-        const result = await cockpit.spawn(["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"]);
+        const args = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"];
+        if (scope === "user") {
+            args.splice(1, 0, "--user");
+        }
+        const result = await cockpit.spawn(args);
         const units: UnitInfo[] = [];
         
         for (const line of result.split("\n")) {
@@ -28,9 +32,13 @@ export async function listUnits(): Promise<UnitInfo[]> {
     }
 }
 
-export async function getStatus(unit: string): Promise<string> {
+export async function getStatus(unit: string, scope: "system" | "user" = "system"): Promise<string> {
     try {
-        const result = await cockpit.spawn(["systemctl", "status", unit, "--no-pager", "-l"]);
+        const args = ["systemctl", "status", unit, "--no-pager", "-l"];
+        if (scope === "user") {
+            args.splice(1, 0, "--user");
+        }
+        const result = await cockpit.spawn(args);
         return result;
     } catch (e: any) {
         // systemctl status returns non-zero for stopped services, but we still want the output
@@ -41,14 +49,23 @@ export async function getStatus(unit: string): Promise<string> {
     }
 }
 
-export async function manageService(unit: string, action: string): Promise<string> {
+export async function manageService(unit: string, action: string, scope: "system" | "user" = "system"): Promise<string> {
     const allowed_actions = ["start", "stop", "restart", "reload", "enable", "disable"];
     if (!allowed_actions.includes(action)) {
         throw new Error(`Invalid action: ${action}`);
     }
 
     try {
-        await cockpit.spawn(["systemctl", action, unit], { superuser: "require" });
+        const args = ["systemctl", action, unit];
+        const options: any = {};
+        
+        if (scope === "user") {
+            args.splice(1, 0, "--user");
+        } else {
+            options.superuser = "require";
+        }
+
+        await cockpit.spawn(args, options);
         return `Successfully executed ${action} on ${unit}`;
     } catch (e: any) {
         return `Error: ${e.message || e.stderr || e}`;

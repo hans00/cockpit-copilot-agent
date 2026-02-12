@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 export interface McpTool {
     name: string;
+    title?: string;
     description?: string;
     inputSchema: {
         type: "object";

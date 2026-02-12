@@ -134,7 +134,7 @@ RULES:
         ];
 
         const tools = await this.mcpManager.listAllTools();
-        const llmTools = tools.map((t: any) => t.tool);
+        const llmTools = tools.map((t) => t.tool);
 
         // Cache tool metadata for UI names
         for (const t of tools) {
@@ -144,7 +144,7 @@ RULES:
         // Reset processing state before starting LLM to ensure transition
         this.isProcessing = false;
         this.onUpdate(this.messages);
-        
+
         this.isProcessing = true;
         this.onUpdate(this.messages);
 
@@ -240,8 +240,10 @@ RULES:
 
     public getToolDisplayName(fullName: string): string {
         const metadata = this.toolMetadata.get(fullName);
+        if (metadata?.title) {
+            return metadata.title;
+        }
         if (metadata?.description) {
-            // Use the first line of description if it exists
             return metadata.description.split('\n')[0];
         }
 

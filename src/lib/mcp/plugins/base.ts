@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export abstract class ToolPlugin {
     /** Name of the plugin (e.g. 'vm', 'container', 'fs') */
@@ -15,12 +15,7 @@ export abstract class ToolPlugin {
     abstract detect(): Promise<boolean>;
 
     /**
-     * Return a list of MCP tool definitions provided by this plugin.
+     * Register tools with the McpServer instance.
      */
-    abstract getTools(): Tool[];
-
-    /**
-     * Execute a tool provided by this plugin.
-     */
-    abstract execute(toolName: string, args: Record<string, any>): Promise<any>;
+    abstract register(server: McpServer): void;
 }

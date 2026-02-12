@@ -1,17 +1,13 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { 
-    CallToolRequestSchema, 
-    ListToolsRequestSchema,
-    CallToolRequest,
-    ListToolsRequest
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { z } from "zod";
 
 // Core tools
 import * as systemd from "./tools/systemd.js";
 import * as packages from "./tools/packages.js";
+import * as disks from "./tools/disks.js";
 import * as files from "./tools/files.js";
 import * as network from "./tools/network.js";
 import * as users from "./tools/users.js";
@@ -21,14 +17,15 @@ import * as logs from "./tools/logs.js";
 import { ToolPlugin } from "./plugins/base.js";
 import { VmPlugin } from "./plugins/vm.js";
 import { ContainerPlugin } from "./plugins/containers.js";
-import { FsPlugin } from "./plugins/filesystems.js";
+import { ZfsPlugin } from "./plugins/zfs.js";
+import { SmartPlugin } from "./plugins/smart.js";
 
 export class McpServerLocal {
-    private server: Server;
+    private server: McpServer;
     private plugins: ToolPlugin[] = [];
 
     constructor() {
-        this.server = new Server(
+        this.server = new McpServer(
             {
                 name: "cockpit-copilot-server",
                 version: "0.1.0"
@@ -40,235 +37,287 @@ export class McpServerLocal {
             }
         );
 
-        this.setupHandlers();
+        this.setupTools();
     }
 
-    private setupHandlers() {
-        // List tools handler
-        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-            const tools: any[] = [
-                // Systemd
-                {
-                    name: "service_list",
-                    description: "List all systemd units",
-                    inputSchema: { type: "object", properties: {} }
-                },
-                {
-                    name: "service_status",
-                    description: "Get status of a systemd unit",
-                    inputSchema: {
-                        type: "object",
-                        properties: { unit: { type: "string" } },
-                        required: ["unit"]
-                    }
-                },
-                {
-                    name: "service_action",
-                    description: "Start/stop/restart/enable/disable a systemd unit (requires root)",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            unit: { type: "string" },
-                            action: { type: "string", enum: ["start", "stop", "restart", "reload", "enable", "disable"] }
-                        },
-                        required: ["unit", "action"]
-                    }
-                },
-                // Packages
-                {
-                    name: "package_search",
-                    description: "Search available packages",
-                    inputSchema: {
-                        type: "object",
-                        properties: { query: { type: "string" } },
-                        required: ["query"]
-                    }
-                },
-                {
-                    name: "package_install",
-                    description: "Install packages (requires root)",
-                    inputSchema: {
-                        type: "object",
-                        properties: { packages: { type: "array", items: { type: "string" } } },
-                        required: ["packages"]
-                    }
-                },
-                {
-                    name: "package_remove",
-                    description: "Remove packages (requires root)",
-                    inputSchema: {
-                        type: "object",
-                        properties: { packages: { type: "array", items: { type: "string" } } },
-                        required: ["packages"]
-                    }
-                },
-                // Files
-                {
-                    name: "file_read",
-                    description: "Read file contents",
-                    inputSchema: {
-                        type: "object",
-                        properties: { path: { type: "string" } },
-                        required: ["path"]
-                    }
-                },
-                {
-                    name: "file_write",
-                    description: "Write content to a file (requires root/permission)",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            path: { type: "string" },
-                            content: { type: "string" }
-                        },
-                        required: ["path", "content"]
-                    }
-                },
-                {
-                    name: "file_list",
-                    description: "List directory contents",
-                    inputSchema: {
-                        type: "object",
-                        properties: { path: { type: "string" } },
-                        required: ["path"]
-                    }
-                },
-                // Network
-                {
-                    name: "network_info",
-                    description: "Show network interfaces and IPs",
-                    inputSchema: { type: "object", properties: {} }
-                },
-                {
-                    name: "file_download",
-                    description: "Download a file from a URL to a local path",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            url: { type: "string" },
-                            dest: { type: "string" }
-                        },
-                        required: ["url", "dest"]
-                    }
-                },
-                // Users
-                {
-                    name: "user_list",
-                    description: "List system users",
-                    inputSchema: { type: "object", properties: {} }
-                },
-                {
-                    name: "user_add",
-                    description: "Create a new user (requires root)",
-                    inputSchema: {
-                        type: "object",
-                        properties: { username: { type: "string" } },
-                        required: ["username"]
-                    }
-                },
-                // Logs
-                {
-                    name: "journal_query",
-                    description: "Query system logs (journalctl)",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            service: { type: "string", description: "Filter by systemd unit" },
-                            lines: { type: "integer", default: 50 }
-                        }
-                    }
-                },
-                // System Info
-                {
-                    name: "system_info",
-                    description: "Get system hostname, OS, kernel, uptime",
-                    inputSchema: { type: "object", properties: {} }
-                }
-            ];
-
-            // Add tools from enabled plugins
-            for (const plugin of this.plugins) {
-                tools.push(...plugin.getTools());
-            }
-
-            return { tools };
-        });
-
-        // Call tool handler
-        this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            const { name, arguments: args } = request.params;
-
-            try {
-                let result: any;
-                switch (name) {
-                    case "service_list":
-                        result = await systemd.listUnits();
-                        break;
-                    case "service_status":
-                        result = await systemd.getStatus(args?.unit as string);
-                        break;
-                    case "service_action":
-                        result = await systemd.manageService(args?.unit as string, args?.action as string);
-                        break;
-                    case "package_search":
-                        result = await packages.search(args?.query as string);
-                        break;
-                    case "package_install":
-                        result = await packages.install(args?.packages as string[]);
-                        break;
-                    case "package_remove":
-                        result = await packages.remove(args?.packages as string[]);
-                        break;
-                    case "file_read":
-                        result = await files.readFile(args?.path as string);
-                        break;
-                    case "file_write":
-                        result = await files.writeFile(args?.path as string, args?.content as string);
-                        break;
-                    case "file_list":
-                        result = await files.listDir(args?.path as string);
-                        break;
-                    case "network_info":
-                        result = await network.getInfo();
-                        break;
-                    case "file_download":
-                        result = await network.downloadFile(args?.url as string, args?.dest as string);
-                        break;
-                    case "user_list":
-                        result = await users.listUsers();
-                        break;
-                    case "user_add":
-                        result = await users.addUser(args?.username as string);
-                        break;
-                    case "journal_query":
-                        result = await logs.queryJournal(args?.service as string, args?.lines as number);
-                        break;
-                    case "system_info":
-                        result = await this.getSystemInfo();
-                        break;
-                    default:
-                        // Check plugins
-                        for (const plugin of this.plugins) {
-                            if (plugin.getTools().some(t => t.name === name)) {
-                                result = await plugin.execute(name, args as Record<string, any>);
-                                return {
-                                    content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }]
-                                };
-                            }
-                        }
-                        throw new Error(`Unknown tool: ${name}`);
-                }
-
+    private setupTools() {
+        // Systemd
+        this.server.registerTool(
+            "service_list",
+            {
+                title: "List services",
+                description: "List all systemd units",
+                inputSchema: z.object({
+                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                })
+            },
+            async ({ scope }) => {
+                const result = await systemd.listUnits(scope);
                 return {
-                    content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }]
-                };
-            } catch (e: any) {
-                return {
-                    content: [{ type: "text", text: `Error: ${e.message || e}` }],
-                    isError: true
+                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
                 };
             }
-        });
+        );
+
+        this.server.registerTool(
+            "service_status",
+            {
+                title: "Service status",
+                description: "Get status of a systemd unit",
+                inputSchema: z.object({
+                    unit: z.string().describe("Unit name"),
+                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                })
+            },
+            async ({ unit, scope }) => {
+                const result = await systemd.getStatus(unit, scope);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "service_action",
+            {
+                title: "Manage systemd service",
+                description: "Start/stop/restart/enable/disable a systemd unit",
+                inputSchema: z.object({
+                    unit: z.string().describe("Unit name"),
+                    action: z.enum(["start", "stop", "restart", "reload", "enable", "disable"]).describe("Action to perform"),
+                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                })
+            },
+            async ({ unit, action, scope }) => {
+                const result = await systemd.manageService(unit, action, scope);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // Packages
+        this.server.registerTool(
+            "package_search",
+            {
+                title: "Search packages",
+                description: "Search available packages",
+                inputSchema: z.object({
+                    query: z.string().describe("Search query")
+                })
+            },
+            async ({ query }) => {
+                const result = await packages.search(query);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "package_install",
+            {
+                title: "Install packages",
+                description: "Install packages (requires root)",
+                inputSchema: z.object({
+                    packages: z.array(z.string()).describe("List of package names")
+                })
+            },
+            async ({ packages: pkgs }) => {
+                const result = await packages.install(pkgs);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "package_remove",
+            {
+                title: "Remove packages",
+                description: "Remove packages (requires root)",
+                inputSchema: z.object({
+                    packages: z.array(z.string()).describe("List of package names")
+                })
+            },
+            async ({ packages: pkgs }) => {
+                const result = await packages.remove(pkgs);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // Disk
+        this.server.registerTool(
+            "disk_list",
+            {
+                title: "List disks",
+                description: "List block devices (lsblk)",
+                inputSchema: z.object({}),
+            },
+            async () => {
+                const result = await disks.listDisks();
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // Files
+        this.server.registerTool(
+            "file_read",
+            {
+                title: "Read file",
+                description: "Read file contents",
+                inputSchema: z.object({
+                    path: z.string().describe("Absolute path to file")
+                })
+            },
+            async ({ path }) => {
+                const result = await files.readFile(path);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "file_write",
+            {
+                title: "Write file",
+                description: "Write content to a file (requires root/permission)",
+                inputSchema: z.object({
+                    path: z.string().describe("Absolute path to file"),
+                    content: z.string().describe("Content to write")
+                })
+            },
+            async ({ path, content }) => {
+                const result = await files.writeFile(path, content);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "file_list",
+            {
+                title: "List directory contents",
+                description: "List directory contents",
+                inputSchema: z.object({
+                    path: z.string().describe("Absolute path to directory")
+                })
+            },
+            async ({ path }) => {
+                const result = await files.listDir(path);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+                };
+            }
+        );
+
+        // Network
+        this.server.registerTool(
+            "network_info",
+            {
+                title: "Network info",
+                description: "Show network interfaces and IPs",
+                inputSchema: z.object({})
+            },
+            async () => {
+                const result = await network.getInfo();
+                return {
+                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "file_download",
+            {
+                title: "Download file",
+                description: "Download a file from a URL to a local path",
+                inputSchema: z.object({
+                    url: z.string().describe("URL to download"),
+                    dest: z.string().describe("Destination path")
+                })
+            },
+            async ({ url, dest }) => {
+                const result = await network.downloadFile(url, dest);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // Users
+        this.server.registerTool(
+            "user_list",
+            {
+                title: "List users",
+                description: "List system users",
+                inputSchema: z.object({})
+            },
+            async () => {
+                const result = await users.listUsers();
+                return {
+                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+                };
+            }
+        );
+
+        this.server.registerTool(
+            "user_add",
+            {
+                title: "Add user",
+                description: "Create a new user (requires root)",
+                inputSchema: z.object({
+                    username: z.string().describe("Username")
+                })
+            },
+            async ({ username }) => {
+                const result = await users.addUser(username);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // Logs
+        this.server.registerTool(
+            "journal_query",
+            {
+                title: "Query system logs",
+                description: "Query system logs (journalctl)",
+                inputSchema: z.object({
+                    service: z.string().optional().describe("Filter by systemd unit"),
+                    lines: z.number().default(50).describe("Number of lines")
+                })
+            },
+            async ({ service, lines }) => {
+                const result = await logs.queryJournal(service, lines);
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
+
+        // System Info
+        this.server.registerTool(
+            "system_info",
+            {
+                title: "System info",
+                description: "Get system hostname, OS, kernel, uptime",
+                inputSchema: z.object({})
+            },
+            async () => {
+                const result = await this.getSystemInfo();
+                return {
+                    content: [{ type: "text", text: result }]
+                };
+            }
+        );
     }
 
     private async getSystemInfo(): Promise<string> {
@@ -286,12 +335,15 @@ export class McpServerLocal {
         const allPlugins = [
             new VmPlugin(),
             new ContainerPlugin(),
-            new FsPlugin()
+            new ZfsPlugin(),
+            new SmartPlugin()
         ];
 
         for (const plugin of allPlugins) {
             if (await plugin.detect()) {
                 this.plugins.push(plugin);
+                // Register plugin tools
+                plugin.register(this.server);
             }
         }
     }
