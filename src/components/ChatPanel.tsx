@@ -39,6 +39,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
 
     const hasPendingApprovals = agent.pendingApprovals.length > 0;
 
+    // Extract strings for translation to ensure xgettext picks them up
+    const tCockpitCopilot = _("Cockpit Copilot");
+    const tGreeting = _("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.");
+    const tToolCalling = _("Tool Calling");
+    const tYou = _("You");
+    const tCopilot = _("Copilot");
+    const tToolApprovalRequired = _("Tool Approval Required");
+    const tApproveRun = _("Approve & Run");
+    const tReject = _("Reject");
+    const tThinking = _("Thinking...");
+    const tPlaceholder = _("Type a command or ask a question...");
+
     return (
         <Chatbot displayMode={ChatbotDisplayMode.embedded}>
             <ChatbotContent>
@@ -46,10 +58,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                     <EmptyState>
                         <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
                             <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
-                            <h4 className="pf-v6-c-title pf-m-lg">{_("Cockpit Copilot")}</h4>
+                            <h4 className="pf-v6-c-title pf-m-lg">{tCockpitCopilot}</h4>
                         </div>
                         <EmptyStateBody>
-                            {_("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.")}
+                            {tGreeting}
                         </EmptyStateBody>
                     </EmptyState>
                 ) : (
@@ -60,7 +72,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                 return (
                                     <ToolResponse
                                         key={msg.id}
-                                        toggleContent={<>{_("Tool Calling")}: <strong>{toolName}</strong></>}
+                                        toggleContent={<>{tToolCalling}: <strong>{toolName}</strong></>}
                                         body={(
                                             <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
                                                 {msg.content || msg.toolResult?.output || ""}
@@ -77,7 +89,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                     key={msg.id}
                                     role={msg.role === 'user' ? 'user' : 'bot'}
                                     content={msg.content}
-                                    name={msg.role === 'user' ? _("You") : _("Copilot")}
+                                    name={msg.role === 'user' ? tYou : tCopilot}
                                 />
                             );
                         })}
@@ -86,9 +98,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                         {agent.pendingApprovals.map((approval) => (
                              <ToolCall
                                 key={approval.toolCall.id}
-                                titleText={`${_("Tool Approval Required")}: ${agent.getToolDisplayName(approval.toolCall.function.name)}`}
-                                runButtonText={_("Approve & Run")}
-                                cancelButtonText={_("Reject")}
+                                titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(approval.toolCall.function.name)}`}
+                                runButtonText={tApproveRun}
+                                cancelButtonText={tReject}
                                 runButtonProps={{
                                     onClick: () => agent.approveToolCall(approval.toolCall.id)
                                 }}
@@ -105,7 +117,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                         ))}
 
                         {isProcessing && !hasPendingApprovals && (
-                             <Message role="bot" isLoading loadingWord={_("Thinking...")} />
+                             <Message role="bot" isLoading loadingWord={tThinking} />
                         )}
                         <div ref={bottomRef} />
                     </MessageBox>
@@ -114,7 +126,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
             <ChatbotFooter>
                 <MessageBar
                     onSendMessage={(msg) => handleSendMessage(String(msg))}
-                    placeholder={_("Type a command or ask a question...")}
+                    placeholder={tPlaceholder}
                     isSendButtonDisabled={isProcessing || hasPendingApprovals}
                     hasAttachButton={false} // Disable attachments for now as logic isn't ported
                 />

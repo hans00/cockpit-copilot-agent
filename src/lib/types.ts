@@ -29,6 +29,7 @@ export interface CopilotSettings {
     };
     mcpServers: McpServerConfig[];
     customSystemPrompt: string;
+    allowShellAccess: boolean;
 }
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
@@ -39,7 +40,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
         model: "gpt-4o"
     },
     mcpServers: [],
-    customSystemPrompt: ""
+    customSystemPrompt: "",
+    allowShellAccess: false
 };
 
 export interface ToolCall {

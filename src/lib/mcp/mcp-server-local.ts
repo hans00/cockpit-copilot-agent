@@ -19,12 +19,17 @@ import { VmPlugin } from "./plugins/vm.js";
 import { ContainerPlugin } from "./plugins/containers.js";
 import { ZfsPlugin } from "./plugins/zfs.js";
 import { SmartPlugin } from "./plugins/smart.js";
+import * as shell from "./tools/shell.js";
+
+export type McpServerLocalOptions = {
+    allow_shell_access: boolean;
+};
 
 export class McpServerLocal {
     private server: McpServer;
     private plugins: ToolPlugin[] = [];
 
-    constructor() {
+    constructor(options: McpServerLocalOptions) {
         this.server = new McpServer(
             {
                 name: "cockpit-copilot-server",
@@ -37,10 +42,29 @@ export class McpServerLocal {
             }
         );
 
-        this.setupTools();
+        this.setupTools(options);
     }
 
-    private setupTools() {
+    private setupTools(options: McpServerLocalOptions) {
+        if (options.allow_shell_access) {
+            this.server.registerTool(
+                "shell",
+                {
+                    title: "Shell",
+                    description: "Run a shell command",
+                    inputSchema: z.object({
+                        command: z.string().describe("Command to run")
+                    })
+                },
+                async ({ command }) => {
+                    const result = await shell.run(command);
+                    return {
+                        content: [{ type: "text", text: result }]
+                    };
+                }
+            );
+        }
+
         // Systemd
         this.server.registerTool(
             "service_list",

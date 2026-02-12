@@ -47,7 +47,9 @@ export class Agent {
     // Initialize: load system context, connect MCP servers
     async init() {
         // Initialize local server
-        const localServer = new McpServerLocal();
+        const localServer = new McpServerLocal({
+            allow_shell_access: this.settings.allowShellAccess
+        });
         await localServer.init();
 
         const clientTransport = new LocalTransport();

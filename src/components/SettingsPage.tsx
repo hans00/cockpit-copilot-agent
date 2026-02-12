@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import React, { useEffect, useState } from 'react';
 import { Form, FormGroup, ActionGroup } from "@patternfly/react-core/dist/esm/components/Form/index.js";
+import { Checkbox } from "@patternfly/react-core/dist/esm/components/Checkbox/index.js";
 import { TextInput } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
 import { TextArea } from "@patternfly/react-core/dist/esm/components/TextArea/index.js";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
@@ -136,6 +137,25 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false 
                         placeholder={_("Describe this system (e.g. 'Production Web Server') to give the agent context.")}
                         isDisabled={!isAdmin}
                     />
+                </FormGroup>
+
+                <div className="pf-v6-u-my-md" />
+
+                <div className="pf-v6-u-my-md" />
+
+                <Title headingLevel="h2" size="lg">{_("Security")}</Title>
+                <FormGroup fieldId="shell-access">
+                    <Checkbox
+                        label={_("Allow Shell Access (Run arbitrary shell commands)")}
+                        isChecked={settings.allowShellAccess}
+                        onChange={(_e, val) => setSettings({ ...settings, allowShellAccess: val })}
+                        id="shell-access"
+                        name="shell-access"
+                        isDisabled={!isAdmin}
+                    />
+                    <div className="pf-v6-c-form__helper-text" aria-live="polite">
+                        {_("Warning: Enabling this allows the agent to execute any command on the system as you.")}
+                    </div>
                 </FormGroup>
 
                 <div className="pf-v6-u-my-md" />

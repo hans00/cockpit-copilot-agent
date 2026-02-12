@@ -14,203 +14,222 @@ msgstr ""
 
 #: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:6
 msgid "AI System Assistant"
-msgstr ""
+msgstr "AI 系統助理"
 
-#: src/components/SettingsPage.tsx:84
+#: src/components/SettingsPage.tsx:117
 msgid "API Key"
-msgstr ""
+msgstr "API 金鑰"
 
-#: src/components/McpServerList.tsx:42
+#: src/components/McpServerList.tsx:51
 msgid "Add"
-msgstr ""
+msgstr "新增"
 
-#: src/components/McpServerList.tsx:96
+#: src/components/McpServerList.tsx:109
 msgid "Add Custom MCP Server"
-msgstr ""
+msgstr "新增自訂 MCP 伺服器"
 
-#: src/components/McpServerList.tsx:52
+#: src/components/McpServerList.tsx:62
 msgid "Add Server"
-msgstr ""
+msgstr "新增伺服器"
 
-#: src/components/SettingsPage.tsx:43
+#: src/app.tsx:111
 msgid "Agent Settings"
 msgstr "代理設定"
 
+#: src/components/SettingsPage.tsx:149
+msgid "Allow Shell Access (Run arbitrary shell commands)"
+msgstr "允許 Shell 存取（執行任意 Shell 指令）"
+
 #: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:8
 msgid "An AI Copilot Agent for Cockpit that helps manage your Linux system."
-msgstr ""
+msgstr "一個用於 Cockpit 的 AI Copilot 代理，可協助管理您的 Linux 系統。"
 
-#: src/components/SettingsPage.tsx:62
+#: src/components/SettingsPage.tsx:91
 msgid "Anthropic"
-msgstr ""
+msgstr "Anthropic"
 
-#: src/components/ChatPanel.tsx:176
+#: src/components/ChatPanel.tsx:49
 msgid "Approve & Run"
-msgstr ""
+msgstr "核准並執行"
 
-#: src/components/McpServerList.tsx:118
+#: src/components/McpServerList.tsx:131
 msgid "Arguments"
-msgstr ""
+msgstr "參數"
 
-#: src/components/SettingsPage.tsx:68
+#: src/components/SettingsPage.tsx:98
 msgid "Base URL"
-msgstr ""
+msgstr "基礎 URL"
 
-#: src/components/McpServerList.tsx:43 src/components/SettingsPage.tsx:116
+#: src/components/McpServerList.tsx:52
 msgid "Cancel"
-msgstr ""
+msgstr "取消"
 
-#: src/app.tsx:69
-msgid "Chat"
-msgstr "聊天"
-
-#: src/app.tsx:49 src/components/ChatPanel.tsx:103
+#: src/components/ChatPanel.tsx:43
 msgid "Cockpit Copilot"
 msgstr "Cockpit Copilot"
 
-#: src/index.html:20 org.cockpit_project.cockpit_copilot_agent.metainfo.xml:5
+#: src/index.html:20
 msgid "Cockpit Copilot Agent"
 msgstr "Cockpit Copilot 代理"
 
-#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:18
-msgid "Cockpit Project"
-msgstr ""
-
-#: src/components/McpServerList.tsx:108
+#: src/components/McpServerList.tsx:121
 msgid "Command"
-msgstr ""
+msgstr "指令"
 
-#: src/components/ChatPanel.tsx:90
+#: src/components/ChatPanel.tsx:47
 msgid "Copilot"
-msgstr ""
+msgstr "Copilot"
 
-#: src/manifest.json:0
+#: src/app.tsx:81
 msgid "Copilot Agent"
-msgstr ""
+msgstr "Copilot 代理"
 
-#: src/components/SettingsPage.tsx:64
+#: src/components/SettingsPage.tsx:93
 msgid "Custom (OpenAI Compatible)"
-msgstr ""
+msgstr "自訂 (OpenAI 相容)"
 
-#: src/components/McpServerList.tsx:50
+#: src/components/McpServerList.tsx:59
 msgid "Custom MCP Servers"
-msgstr ""
+msgstr "自訂 MCP 伺服器"
 
-#: src/components/SettingsPage.tsx:97
+#: src/components/SettingsPage.tsx:131
 msgid "Custom System Prompt"
-msgstr ""
+msgstr "自訂系統提示"
 
-#: src/components/SettingsPage.tsx:103
+#: src/components/SettingsPage.tsx:137
 msgid ""
 "Describe this system (e.g. 'Production Web Server') to give the agent "
 "context."
-msgstr ""
-"描述此系統（例如 '生產 Web 伺服器'）以提供代理上下文。"
+msgstr "描述此系統（例如 '生產 Web 伺服器'）以提供代理上下文。"
 
-#: src/components/SettingsPage.tsx:37
+#: src/components/SettingsPage.tsx:49
 msgid "Failed to save settings: "
 msgstr "儲存設定失敗："
 
-#: src/components/SettingsPage.tsx:61
+#: src/components/SettingsPage.tsx:90
 msgid "Gemini"
+msgstr "Gemini"
+
+#: org.cockpit_project.cockpit_copilot_agent.metainfo.xml:18
+msgid "Hans"
 msgstr ""
 
-#: src/components/ChatPanel.tsx:106
+#: src/components/ChatPanel.tsx:44
 msgid ""
 "Hi! I'm your system agent using MCP. Ask me to manage services, install "
 "packages, or check system logs."
-msgstr ""
-"嗨！我是你的系統代理。可以請我管理服務、安裝套件或檢查系統日誌。"
+msgstr "嗨！我是你的系統代理。可以請我管理服務、安裝套件或檢查系統日誌。"
 
-#: src/app.tsx:99
+#: src/app.tsx:100
 msgid "Initializing Agent..."
 msgstr "正在初始化代理..."
 
-#: src/components/SettingsPage.tsx:50
+#: src/components/SettingsPage.tsx:60
 msgid "LLM Provider"
 msgstr "LLM 提供商"
 
-#: src/components/McpServerList.tsx:56
+#: src/components/McpServerList.tsx:67
 msgid "MCP Servers"
 msgstr "MCP 伺服器"
 
-#: src/components/SettingsPage.tsx:76
+#: src/components/SettingsPage.tsx:107
 msgid "Model Name"
 msgstr "模型名稱"
 
-#: src/components/McpServerList.tsx:99
+#: src/components/McpServerList.tsx:112
 msgid "Name"
 msgstr "名稱"
 
-#: src/components/McpServerList.tsx:82
+#: src/components/McpServerList.tsx:95
 msgid ""
 "No custom servers configured. The built-in system server is always active."
 msgstr "未設定自訂伺服器。內建系統伺服器始終有效。"
 
-#: src/components/SettingsPage.tsx:59
+#: src/app.tsx:116
+msgid ""
+"Note: You do not have administrator privileges. Some settings may be read-"
+"only or hidden."
+msgstr "注意：您沒有管理員權限。某些設定可能僅供唯讀或隱藏。"
+
+#: src/components/SettingsPage.tsx:88
 msgid "Ollama (Local)"
-msgstr ""
+msgstr "Ollama (本地)"
 
-#: src/components/SettingsPage.tsx:60
+#: src/components/SettingsPage.tsx:89
 msgid "OpenAI"
-msgstr ""
+msgstr "OpenAI"
 
-#: src/components/SettingsPage.tsx:63
+#: src/components/SettingsPage.tsx:92
 msgid "OpenRouter"
-msgstr ""
+msgstr "OpenRouter"
 
-#: src/components/SettingsPage.tsx:52
+#: src/components/SettingsPage.tsx:62
 msgid "Provider"
 msgstr "供應商"
 
-#: src/components/ChatPanel.tsx:177
+#: src/components/ChatPanel.tsx:50
 msgid "Reject"
 msgstr "拒絕"
 
-#: src/components/McpServerList.tsx:70
+#: src/components/McpServerList.tsx:82
 msgid "Remove"
 msgstr "移除"
 
-#: src/components/SettingsPage.tsx:115
+#: src/components/SettingsPage.tsx:172
+msgid "Reset"
+msgstr "重置"
+
+#: src/components/SettingsPage.tsx:171
 msgid "Save Settings"
 msgstr "儲存設定"
 
-#: src/components/ChatPanel.tsx:150
-msgid "Send"
-msgstr "送出"
+#: src/components/SettingsPage.tsx:146
+msgid "Security"
+msgstr "安全性"
 
-#: src/app.tsx:55 src/app.tsx:72
+#: src/components/SettingsPage.tsx:86
+#, fuzzy
+msgid "Select LLM Provider"
+msgstr "LLM 提供商"
+
+#: src/app.tsx:83
 msgid "Settings"
 msgstr "設定"
 
-#: src/components/SettingsPage.tsx:35
+#: src/components/SettingsPage.tsx:47
 msgid "Settings saved successfully."
 msgstr "儲存設定成功。"
 
-#: src/components/SettingsPage.tsx:96
+#: src/components/SettingsPage.tsx:130
 msgid "System Context"
 msgstr "系統上下文"
 
-#: src/components/ChatPanel.tsx:169
-msgid "The agent wants to execute:"
-msgstr "代理想要執行："
-
-#: src/components/ChatPanel.tsx:132
+#: src/components/ChatPanel.tsx:51
 msgid "Thinking..."
 msgstr "思考中..."
 
-#: src/components/ChatPanel.tsx:167
+#: src/components/ChatPanel.tsx:48
 msgid "Tool Approval Required"
 msgstr "工具核准需求"
 
-#: src/components/ChatPanel.tsx:62
-msgid "Tool Output"
-msgstr "工具輸出"
+#: src/components/ChatPanel.tsx:45
+msgid "Tool Calling"
+msgstr "工具呼叫"
 
-#: src/components/ChatPanel.tsx:145
+#: src/components/ChatPanel.tsx:52
 msgid "Type a command or ask a question..."
 msgstr "輸入命令或提出問題..."
 
-#: src/components/ChatPanel.tsx:90
+#: src/components/SettingsPage.tsx:157
+msgid ""
+"Warning: Enabling this allows the agent to execute any command on the system "
+"as you."
+msgstr "警告：啟用此功能允許代理以您的身分在系統上執行任何指令。"
+
+#: src/components/ChatPanel.tsx:46
 msgid "You"
 msgstr "你"
+
+#: src/components/SettingsPage.tsx:36
+msgid "You do not have permission to save settings."
+msgstr "你沒有權限儲存設定。"

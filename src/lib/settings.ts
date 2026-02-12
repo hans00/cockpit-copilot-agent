@@ -18,7 +18,8 @@ export async function loadSettings(): Promise<CopilotSettings> {
         return {
             llm: { ...DEFAULT_SETTINGS.llm, ...loaded.llm },
             mcpServers: loaded.mcpServers || [],
-            customSystemPrompt: loaded.customSystemPrompt || ""
+            customSystemPrompt: loaded.customSystemPrompt || "",
+            allowShellAccess: loaded.allowShellAccess ?? false
         };
     } catch (error) {
         console.error("Failed to load settings:", error);
