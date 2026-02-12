@@ -130,22 +130,34 @@ export class ZfsPlugin extends ToolPlugin {
                 description: "Create a ZFS dataset",
                 inputSchema: z.object({
                     pool: z.string().describe("Pool name"),
-                    name: z.string().describe("Dataset name"),
-                    is_sparse: z.boolean().optional().describe("If true, create a sparse dataset"),
-                    is_volume: z.boolean().optional().describe("If true, create a volume (zvol)"),
-                    size: z.string().describe("Size (e.g. 10G)"),
+                    name: z.string().describe("Name"),
+                    type: z.enum(["volume", "sparse_volume", "dataset"]),
+                    size: z.string().optional().describe("Size (e.g. 10G)"),
                     blocksize: z.string().optional().describe("Block size (optional, e.g. 64k)")
                 })
             },
-            async ({ pool, name, is_volume, is_sparse, size, blocksize }) => {
+            async ({ pool, name, type, size, blocksize }) => {
                 const cmd = ["zfs", "create"];
-                if (is_sparse) {
-                    cmd.push("-s");
-                }
-                if (is_volume) {
-                    cmd.push("-V", size);
-                } else {
-                    cmd.push(size);
+                switch (type) {
+                    case "sparse_volume":
+                        if (!size) {
+                            throw new Error("Size is required for sparse volume");
+                        }
+                        cmd.push("-s", "-V", size);
+                        break;
+                    case "volume":
+                        if (!size) {
+                            throw new Error("Size is required for volume");
+                        }
+                        cmd.push("-V", size);
+                        break;
+                    case "dataset":
+                        if (size) {
+                            cmd.push("-o", `quota=${size}`);
+                        }
+                        break;
+                    default:
+                        throw new Error(`Invalid type: ${type}`);
                 }
                 if (blocksize) {
                     cmd.push("-o", `volblocksize=${blocksize}`);
