@@ -30,7 +30,8 @@ export class SmartPlugin extends ToolPlugin {
                 description: "Check SMART health of a disk",
                 inputSchema: z.object({
                     device: z.string().describe("Device path (e.g. /dev/sda)")
-                })
+                }),
+                _meta: { isLowRisk: true },
             },
             async ({ device }) => {
                 const result = await this.run(["smartctl", "-H", device]);
@@ -65,7 +66,8 @@ export class SmartPlugin extends ToolPlugin {
                 description: "Read SMART test results from a disk",
                 inputSchema: z.object({
                     device: z.string().describe("Device path (e.g. /dev/sda)")
-                })
+                }),
+                _meta: { isLowRisk: true },
             },
             async ({ device }) => {
                 const result = await this.run(["smartctl", "-l", "selftest", device]);

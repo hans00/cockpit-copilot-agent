@@ -15,7 +15,8 @@ import { CopilotSettings, DEFAULT_SETTINGS } from "../lib/types.js";
 import { McpServerList } from "./McpServerList.jsx";
 import { _ } from "../lib/i18n.js";
 
-export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
+export const SettingsPage: React.FC<{ isAdmin?: boolean; onSettingsChange?: () => void }> = (props) => {
+    const { isAdmin = false } = props;
     const [settings, setSettings] = useState<CopilotSettings>(DEFAULT_SETTINGS);
     const [apiKey, setApiKey] = useState("");
     const [statusMsg, setStatusMsg] = useState<{ type: "success" | "danger", text: string } | null>(null);
@@ -45,6 +46,9 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false 
                 provider: settings.llm.provider
             });
             setStatusMsg({ type: "success", text: _("Settings saved successfully.") });
+            if (props.onSettingsChange) {
+                props.onSettingsChange();
+            }
         } catch (e) {
             setStatusMsg({ type: "danger", text: _("Failed to save settings: ") + e });
         }

@@ -12,6 +12,7 @@ class CockpitStdioTransport implements Transport {
     private process: Spawn<string> | undefined;
     private buffer = "";
     private config: McpServerConfig;
+    private lastMessage: string | undefined;
 
     onclose?: () => void;
     onerror?: (error: Error) => void;
@@ -28,8 +29,7 @@ class CockpitStdioTransport implements Transport {
         return new Promise((resolve, reject) => {
             try {
                 this.process = cockpit.spawn([command, ...(this.config.args || [])], {
-                    superuser: "try",
-                    environ: ["PYTHONUNBUFFERED=1"]
+                    pty: true,
                 });
 
                 this.process?.stream((data: string) => {
@@ -38,9 +38,6 @@ class CockpitStdioTransport implements Transport {
                     .fail((err: Error) => {
                         if (this.onerror) this.onerror(err);
                         reject(err);
-                    })
-                    .done(() => {
-                        if (this.onclose) this.onclose();
                     });
 
                 resolve();
@@ -53,7 +50,8 @@ class CockpitStdioTransport implements Transport {
     async send(message: JSONRPCMessage): Promise<void> {
         if (!this.process) throw new Error("Process not started");
         const json = JSON.stringify(message);
-        this.process.input(json + "\n");
+        this.lastMessage = json;
+        this.process.input(json + "\n", true);
     }
 
     async close(): Promise<void> {
@@ -69,6 +67,12 @@ class CockpitStdioTransport implements Transport {
             const line = this.buffer.substring(0, idx).trim();
             this.buffer = this.buffer.substring(idx + 1);
 
+            // Ignore last message if it's the same as the one we sent
+            if (line === this.lastMessage) {
+                this.lastMessage = undefined;
+                continue;
+            }
+
             if (line) {
                 try {
                     const msg = JSON.parse(line);
@@ -76,8 +80,7 @@ class CockpitStdioTransport implements Transport {
                         this.onmessage(msg);
                     }
                 } catch (e) {
-                    console.error("Failed to parse JSON-RPC message:", line, e);
-                    if (this.onerror) this.onerror(e as Error);
+                    console.warn("Ignored non-JSON output from stdio server:", line);
                 }
             }
         }
@@ -140,7 +143,9 @@ export class McpClientManager {
                         name: `${serverName}__${t.name}`,
                         title: t.title,
                         description: t.description,
-                        inputSchema: t.inputSchema
+                        inputSchema: t.inputSchema,
+                        // @ts-ignore: extra metadata
+                        _meta: t._meta
                     } as McpTool
                 })));
             } catch (e) {

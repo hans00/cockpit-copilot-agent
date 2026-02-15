@@ -29,6 +29,7 @@ export class ZfsPlugin extends ToolPlugin {
                 title: "ZFS pool status",
                 description: "Get ZFS pool status",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true },
             },
             async () => {
                 const result = await this.run(["zpool", "status"]);
@@ -44,6 +45,7 @@ export class ZfsPlugin extends ToolPlugin {
                 title: "List ZFS datasets",
                 description: "List ZFS datasets and zvols",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true },
             },
             async () => {
                 const result = await this.run(["zfs", "list"]);
@@ -79,7 +81,8 @@ export class ZfsPlugin extends ToolPlugin {
                 description: "List ZFS snapshots",
                 inputSchema: z.object({
                     name: z.string().describe("Pool name"),
-                })
+                }),
+                _meta: { isLowRisk: true },
             },
             async ({ name }) => {
                 const result = await this.run(["zfs", "list", "-t", "snapshot", name]);

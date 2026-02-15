@@ -7,3 +7,11 @@ export async function run(command: string): Promise<string> {
         { binary: false }
     );
 }
+
+// sudo
+export async function sudo(runAs: string, command: string): Promise<string> {
+    return await cockpit.spawn(
+        ["sudo", "-u", runAs, "sh", "-c", command],
+        { binary: false, superuser: "require" }
+    );
+}

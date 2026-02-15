@@ -27,27 +27,23 @@ msgstr ""
 msgid "AI System Assistant"
 msgstr "AI システムアシスタント"
 
-#: src/components/SettingsPage.tsx:117
+#: src/components/SettingsPage.tsx:121
 msgid "API Key"
 msgstr "API キー"
 
-#: src/components/McpServerList.tsx:51
+#: src/components/McpServerList.tsx:93
 msgid "Add"
 msgstr "追加"
 
-#: src/components/McpServerList.tsx:109
-msgid "Add Custom MCP Server"
-msgstr "カスタム MCP サーバーを追加"
-
-#: src/components/McpServerList.tsx:62
+#: src/components/McpServerList.tsx:104
 msgid "Add Server"
 msgstr "サーバーを追加"
 
-#: src/app.tsx:111
+#: src/app.tsx:155
 msgid "Agent Settings"
 msgstr "エージェント設定"
 
-#: src/components/SettingsPage.tsx:149
+#: src/components/SettingsPage.tsx:153
 msgid "Allow Shell Access (Run arbitrary shell commands)"
 msgstr "シェルアクセスを許可（任意のシェルコマンドを実行）"
 
@@ -55,27 +51,31 @@ msgstr "シェルアクセスを許可（任意のシェルコマンドを実行
 msgid "An AI Copilot Agent for Cockpit that helps manage your Linux system."
 msgstr "Cockpit で Linux システムを管理するための AI コピレットエージェント。"
 
-#: src/components/SettingsPage.tsx:91
+#: src/components/SettingsPage.tsx:95
 msgid "Anthropic"
 msgstr "Anthropic"
 
-#: src/components/ChatPanel.tsx:49
+#: src/components/ChatPanel.tsx:51
 msgid "Approve & Run"
 msgstr "承認して実行"
 
-#: src/components/McpServerList.tsx:131
-msgid "Arguments"
-msgstr "引数"
-
-#: src/components/SettingsPage.tsx:98
+#: src/components/SettingsPage.tsx:102
 msgid "Base URL"
 msgstr "ベース URL"
 
-#: src/components/McpServerList.tsx:52
+#: src/components/McpServerList.tsx:94
 msgid "Cancel"
 msgstr "キャンセル"
 
-#: src/components/ChatPanel.tsx:43
+#: src/components/ChatHistorySidebar.tsx:45
+msgid "Chat History"
+msgstr "チャット履歴"
+
+#: src/app.tsx:94
+msgid "Close history"
+msgstr "履歴を閉じる"
+
+#: src/components/ChatPanel.tsx:45
 msgid "Cockpit Copilot"
 msgstr "Cockpit Copilot"
 
@@ -83,31 +83,27 @@ msgstr "Cockpit Copilot"
 msgid "Cockpit Copilot Agent"
 msgstr "Cockpit Copilot エージェント"
 
-#: src/components/McpServerList.tsx:121
-msgid "Command"
-msgstr "コマンド"
-
-#: src/components/ChatPanel.tsx:47
+#: src/components/ChatPanel.tsx:49
 msgid "Copilot"
 msgstr "コピレット"
 
-#: src/app.tsx:81
+#: src/app.tsx:99
 msgid "Copilot Agent"
 msgstr "コピレットエージェント"
 
-#: src/components/SettingsPage.tsx:93
+#: src/components/SettingsPage.tsx:97
 msgid "Custom (OpenAI Compatible)"
 msgstr "カスタム（OpenAI互換）"
 
-#: src/components/McpServerList.tsx:59
+#: src/components/McpServerList.tsx:101
 msgid "Custom MCP Servers"
 msgstr "カスタム MCP サーバー"
 
-#: src/components/SettingsPage.tsx:131
+#: src/components/SettingsPage.tsx:135
 msgid "Custom System Prompt"
 msgstr "カスタムシステムプロンプト"
 
-#: src/components/SettingsPage.tsx:137
+#: src/components/SettingsPage.tsx:141
 msgid ""
 "Describe this system (e.g. 'Production Web Server') to give the agent "
 "context."
@@ -115,11 +111,11 @@ msgstr ""
 "このシステムを説明してください（例：'生産用 Web サーバー'）エージェントに コ"
 "ンテキストを与えます。"
 
-#: src/components/SettingsPage.tsx:49
+#: src/components/SettingsPage.tsx:53
 msgid "Failed to save settings: "
 msgstr "設定を保存できませんでした："
 
-#: src/components/SettingsPage.tsx:90
+#: src/components/SettingsPage.tsx:94
 msgid "Gemini"
 msgstr "Gemini"
 
@@ -127,7 +123,7 @@ msgstr "Gemini"
 msgid "Hans"
 msgstr ""
 
-#: src/components/ChatPanel.tsx:44
+#: src/components/ChatPanel.tsx:46
 msgid ""
 "Hi! I'm your system agent using MCP. Ask me to manage services, install "
 "packages, or check system logs."
@@ -136,109 +132,108 @@ msgstr ""
 "か、パッケージをインストールするか、システムログを確認するかを私に 要求してく"
 "ださい。"
 
-#: src/app.tsx:100
+#: src/app.tsx:141
 msgid "Initializing Agent..."
 msgstr "エージェントを初期化中..."
 
-#: src/components/SettingsPage.tsx:60
+#: src/components/SettingsPage.tsx:64
 msgid "LLM Provider"
 msgstr "LLM プロバイダー"
 
-#: src/components/McpServerList.tsx:67
+#: src/components/McpServerList.tsx:109
 msgid "MCP Servers"
 msgstr "MCP サーバー"
 
-#: src/components/SettingsPage.tsx:107
+#: src/components/SettingsPage.tsx:111
 msgid "Model Name"
 msgstr "モデル名"
 
-#: src/components/McpServerList.tsx:112
-msgid "Name"
-msgstr "名前"
-
-#: src/components/McpServerList.tsx:95
-msgid ""
-"No custom servers configured. The built-in system server is always active."
+#: src/components/ChatHistorySidebar.tsx:35
+msgid "New Chat"
 msgstr ""
-"カスタムサーバーが設定されていません。組み込みシステムサーバーは常に有効で"
-"す。"
 
-#: src/app.tsx:116
+#: src/components/ChatHistorySidebar.tsx:42
+msgid "No history yet"
+msgstr ""
+
+#: src/app.tsx:160
 msgid ""
 "Note: You do not have administrator privileges. Some settings may be read-"
 "only or hidden."
 msgstr ""
+"注意：管理者権限がありません。一部の設定は読み取り専用または非表示に"
+"なる場合があります。"
 
-#: src/components/SettingsPage.tsx:88
+#: src/components/SettingsPage.tsx:92
 msgid "Ollama (Local)"
 msgstr "Ollama (ローカル)"
 
-#: src/components/SettingsPage.tsx:89
+#: src/app.tsx:94
+msgid "Open history"
+msgstr "履歴を開く"
+
+#: src/components/SettingsPage.tsx:93
 msgid "OpenAI"
 msgstr "OpenAI"
 
-#: src/components/SettingsPage.tsx:92
+#: src/components/SettingsPage.tsx:96
 msgid "OpenRouter"
 msgstr "OpenRouter"
 
-#: src/components/SettingsPage.tsx:62
+#: src/components/SettingsPage.tsx:66
 msgid "Provider"
 msgstr "プロバイダー"
 
-#: src/components/ChatPanel.tsx:50
+#: src/components/ChatPanel.tsx:52
 msgid "Reject"
 msgstr "拒否"
 
-#: src/components/McpServerList.tsx:82
-msgid "Remove"
-msgstr "削除"
-
-#: src/components/SettingsPage.tsx:172
+#: src/components/SettingsPage.tsx:176
 msgid "Reset"
 msgstr "リセット"
 
-#: src/components/SettingsPage.tsx:171
+#: src/components/SettingsPage.tsx:175
 msgid "Save Settings"
 msgstr "設定を保存"
 
-#: src/components/SettingsPage.tsx:146
+#: src/components/SettingsPage.tsx:150
 msgid "Security"
 msgstr "セキュリティ"
 
-#: src/components/SettingsPage.tsx:86
+#: src/components/SettingsPage.tsx:90
 #, fuzzy
 msgid "Select LLM Provider"
 msgstr "LLM プロバイダー"
 
-#: src/app.tsx:83
+#: src/app.tsx:102
 msgid "Settings"
 msgstr "設定"
 
-#: src/components/SettingsPage.tsx:47
+#: src/components/SettingsPage.tsx:48
 msgid "Settings saved successfully."
 msgstr "設定を保存しました。"
 
-#: src/components/SettingsPage.tsx:130
+#: src/components/SettingsPage.tsx:134
 msgid "System Context"
 msgstr "システムコンテキスト"
 
-#: src/components/ChatPanel.tsx:51
+#: src/components/ChatPanel.tsx:53
 msgid "Thinking..."
 msgstr "考えています..."
 
-#: src/components/ChatPanel.tsx:48
+#: src/components/ChatPanel.tsx:50
 msgid "Tool Approval Required"
 msgstr "ツール承認が必要です"
 
-#: src/components/ChatPanel.tsx:45
+#: src/components/ChatPanel.tsx:47
 msgid "Tool Calling"
 msgstr "ツール呼び出し"
 
-#: src/components/ChatPanel.tsx:52
+#: src/components/ChatPanel.tsx:54
 msgid "Type a command or ask a question..."
 msgstr "コマンドを入力または質問を提出..."
 
-#: src/components/SettingsPage.tsx:157
+#: src/components/SettingsPage.tsx:161
 msgid ""
 "Warning: Enabling this allows the agent to execute any command on the system "
 "as you."
@@ -246,10 +241,10 @@ msgstr ""
 "警告：これを有効にすると、エージェントがあなたとしてシステム上で任意のコマン"
 "ドを実行できるようになります。"
 
-#: src/components/ChatPanel.tsx:46
+#: src/components/ChatPanel.tsx:48
 msgid "You"
 msgstr "あなた"
 
-#: src/components/SettingsPage.tsx:36
+#: src/components/SettingsPage.tsx:37
 msgid "You do not have permission to save settings."
 msgstr "設定を保存する権限がありません。"

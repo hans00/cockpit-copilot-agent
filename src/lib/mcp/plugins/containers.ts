@@ -42,6 +42,7 @@ export class ContainerPlugin extends ToolPlugin {
                 title: "List containers",
                 description: "List containers (running and stopped)",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
             },
             async () => {
                 if (!this.runtime) throw new Error("Container runtime not detected");
@@ -59,7 +60,8 @@ export class ContainerPlugin extends ToolPlugin {
                 description: "Inspect a container",
                 inputSchema: z.object({
                     name: z.string().describe("Container name")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ name }) => {
                 if (!this.runtime) throw new Error("Container runtime not detected");
@@ -77,7 +79,8 @@ export class ContainerPlugin extends ToolPlugin {
                 description: "Get logs of a container",
                 inputSchema: z.object({
                     name: z.string().describe("Container name")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ name }) => {
                 if (!this.runtime) throw new Error("Container runtime not detected");
@@ -155,6 +158,7 @@ export class ContainerPlugin extends ToolPlugin {
                 title: "List images",
                 description: "List container images",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true },
             },
             async () => {
                 if (!this.runtime) throw new Error("Container runtime not detected");
@@ -179,7 +183,8 @@ export class ContainerPlugin extends ToolPlugin {
                     })).optional().describe("Port mappings (e.g. 8080:80)"),
                     vols: z.array(z.object({
                         host: z.string().describe("Host path"),
-                        container: z.string().describe("Container path")
+                        container: z.string().describe("Container path"),
+                        flags: z.string().optional().describe("Volume flags (e.g. ro)"),
                     })).optional().describe("Volume mappings (e.g. /host:/container)"),
                     env: z.array(z.string()).optional().describe("Environment variables (e.g. KEY=VAL)"),
                     detach: z.boolean().default(true).describe("Run in background (default true)"),
@@ -187,7 +192,9 @@ export class ContainerPlugin extends ToolPlugin {
                     restart: z.string().optional().describe("Restart policy (e.g. always, on-failure)"),
                     memory: z.string().optional().describe("Memory limit (e.g. 512m)"),
                     cpu: z.string().optional().describe("CPU limit (e.g. 1.0)"),
-                    daemon: z.boolean().optional().describe("If true, automatically setup as a user systemd service")
+                    daemon: z.boolean().optional().describe("If true, automatically setup as a user systemd service"),
+                    gid: z.string().optional().describe("Container group id (e.g. 1000)"),
+                    uid: z.string().optional().describe("Container user id (e.g. 1000)"),
                 })
             },
             async (args) => {
@@ -200,8 +207,10 @@ export class ContainerPlugin extends ToolPlugin {
                 if (args.restart) cmd.push("--restart", args.restart);
                 if (args.memory) cmd.push("--memory", args.memory);
                 if (args.cpu) cmd.push("--cpu", args.cpu);
+                if (args.gid) cmd.push("--gid", args.gid);
+                if (args.uid) cmd.push("--uid", args.uid);
                 (args.ports || []).forEach((p) => cmd.push("-p", `${p.host}:${p.container}`));
-                (args.vols || []).forEach((v) => cmd.push("-v", `${v.host}:${v.container}`));
+                (args.vols || []).forEach((v) => cmd.push("-v", `${v.host}:${v.container}${v.flags ? `:${v.flags}` : ""}`));
                 (args.env || []).forEach((e) => cmd.push("-e", e));
                 cmd.push(args.image);
                 
@@ -212,6 +221,15 @@ export class ContainerPlugin extends ToolPlugin {
                         content: [{ type: "text", text: `${res}\n\nSystemd Setup:\n${systemdRes}` }]
                     };
                 }
+
+                // Fix volume permission for podman
+                if (this.runtime === "podman" && args.vols && args.uid && args.gid) {
+                    // podman unshare chown -R <container_uid>:<container_gid> <host_path>
+                    for (const vol of args.vols) {
+                        await this.runRuntime(["podman", "unshare", "chown", "-R", `${args.uid}:${args.gid}`, vol.host]);
+                    }
+                }
+
                 return {
                     content: [{ type: "text", text: res }]
                 };

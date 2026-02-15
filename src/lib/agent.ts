@@ -1,12 +1,15 @@
 import cockpit from "cockpit";
-import { ChatMessage, CopilotSettings, ToolCall, McpTool } from "./types.js";
+import { ChatMessage, CopilotSettings, ToolCall, McpTool, ChatSession, ChatSessionSummary } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { McpClientManager } from "./mcp-client.js";
-import { getSystemContext } from "./system-context.js";
 import { McpServerLocal } from "./mcp/mcp-server-local.js";
 import { LocalTransport } from "./mcp/local-transport.js";
 
 type UpdateCallback = (messages: ChatMessage[]) => void;
+
+// abc_def__ghi -> Abc Def: Ghi
+const formatToolName = (name: string) =>
+    name.replace(/__/g, ": ").replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
 
 function safeJsonParse(str: string) {
     try {
@@ -15,6 +18,8 @@ function safeJsonParse(str: string) {
         return { error: "Invalid JSON arguments" };
     }
 }
+
+type ChatID = string;
 
 export class Agent {
     private settings: CopilotSettings;
@@ -25,6 +30,9 @@ export class Agent {
     private systemContext: string = "";
     public isProcessing: boolean = false;
     private toolMetadata: Map<string, McpTool> = new Map();
+
+    private history: Record<string, ChatSessionSummary> = {};
+    public currentChatId: string | null = null;
 
     public pendingApprovals: {
         toolCall: ToolCall,
@@ -46,6 +54,232 @@ export class Agent {
 
     // Initialize: load system context, connect MCP servers
     async init() {
+        await cockpit.init();
+        await this.ensureHistoryDir();
+        await this.migrateHistory();
+        await this.loadHistoryIndex();
+
+        if (Object.keys(this.history).length === 0) {
+            await this.createChat();
+        } else {
+            // Switch to most recent
+            const recent = Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified)[0];
+            await this.switchToChat(recent.id);
+        }
+        await this.setupConnection();
+    }
+
+    public getHistory() {
+        return Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified);
+    }
+
+    private get historyDir() {
+        return `${cockpit.info.user.home}/.local/share/cockpit/copilot-chats`;
+    }
+
+    private async ensureHistoryDir() {
+        try {
+            await cockpit.spawn(["mkdir", "-p", this.historyDir]);
+        } catch (e) {
+            console.error("Failed to create history dir", e);
+        }
+    }
+
+    private async migrateHistory() {
+        const oldHistoryPath = `${cockpit.info.user.home}/.local/share/cockpit/copilot-history.json`;
+        try {
+            const file = cockpit.file(oldHistoryPath);
+            const content = await file.read();
+            if (content) {
+                const oldHistory: Record<string, ChatSession> = JSON.parse(content);
+                // Migrate each chat
+                for (const [id, session] of Object.entries(oldHistory)) {
+                    await this.saveChat(session);
+                    this.history[id] = {
+                         id: session.id,
+                         title: session.title,
+                         lastModified: session.lastModified
+                    };
+                }
+                await this.saveHistoryIndex();
+                // Rename old file to avoid re-migration
+                await cockpit.spawn(["mv", oldHistoryPath, `${oldHistoryPath}.bak`]);
+            }
+        } catch (e) {
+            // No old history or invalid
+        }
+    }
+
+    private async loadHistoryIndex() {
+        try {
+            const indexPath = `${this.historyDir}/index.json`;
+            const file = cockpit.file(indexPath);
+            const content = await file.read();
+            if (content) {
+                this.history = JSON.parse(content);
+            }
+        } catch {
+            this.history = {};
+        }
+    }
+
+    private async saveHistoryIndex() {
+        const indexPath = `${this.historyDir}/index.json`;
+        const file = cockpit.file(indexPath);
+        await file.replace(JSON.stringify(this.history));
+    }
+
+    private async loadChat(id: string): Promise<ChatSession | null> {
+        try {
+            const chatPath = `${this.historyDir}/${id}.json`;
+            const file = cockpit.file(chatPath);
+            const content = await file.read();
+            if (content) {
+                return JSON.parse(content);
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    }
+
+    private async saveChat(session: ChatSession) {
+        const chatPath = `${this.historyDir}/${session.id}.json`;
+        const file = cockpit.file(chatPath);
+        await file.replace(JSON.stringify(session));
+    }
+
+    public async createChat() {
+        const id = crypto.randomUUID();
+        const session: ChatSession = {
+            id,
+            title: "New Chat",
+            messages: [],
+            lastModified: Date.now()
+        };
+        
+        await this.saveChat(session);
+        
+        this.history[id] = {
+            id,
+            title: session.title,
+            lastModified: session.lastModified
+        };
+        
+        await this.saveHistoryIndex();
+        await this.switchToChat(id);
+        return id;
+    }
+
+    public async switchToChat(id: string) {
+        if (this.history[id]) {
+            this.currentChatId = id;
+            const session = await this.loadChat(id);
+            if (session) {
+                this.messages = session.messages;
+            } else {
+                this.messages = [];
+            }
+            this.onUpdate(this.messages);
+        }
+    }
+
+    public async deleteChat(id: string) {
+        delete this.history[id];
+        if (this.currentChatId === id) {
+            this.currentChatId = null;
+            this.messages = [];
+            this.onUpdate([]);
+            
+            // Try to switch to another chat
+            const remaining = Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified);
+            if (remaining.length > 0) {
+                 await this.switchToChat(remaining[0].id);
+            } else {
+                 await this.createChat();
+            }
+        }
+        await this.saveHistoryIndex();
+        
+        try {
+             const chatPath = `${this.historyDir}/${id}.json`;
+             await cockpit.spawn(["rm", "-f", chatPath]);
+        } catch (e) {
+            console.error("Failed to delete chat file", e);
+        }
+    }
+
+    private async saveCurrentChat() {
+        if (this.currentChatId && this.history[this.currentChatId]) {
+            const session: ChatSession = {
+                id: this.currentChatId,
+                title: this.history[this.currentChatId].title,
+                messages: this.messages,
+                lastModified: Date.now()
+            };
+
+            // Auto-title if it's "New Chat" and we have messages
+            if (session.title === "New Chat" && this.messages.length > 0) {
+                 const firstMsg = this.messages.find(m => m.role === 'user');
+                 if (firstMsg) {
+                     session.title = firstMsg.content.slice(0, 30) + (firstMsg.content.length > 30 ? "..." : "");
+                 }
+            }
+
+            // Update in-memory index
+            this.history[this.currentChatId].title = session.title;
+            this.history[this.currentChatId].lastModified = session.lastModified;
+
+            await this.saveChat(session);
+            await this.saveHistoryIndex();
+        }
+    }
+
+    public async reconfigure(newSettings: CopilotSettings) {
+        this.settings = newSettings;
+
+        // Re-init LLM with new settings
+        this.llm = new LlmClient({
+            apiKey: newSettings.llm.apiKey,
+            baseUrl: newSettings.llm.baseUrl,
+            model: newSettings.llm.model
+        });
+
+        // Close existing connections
+        await this.mcpManager.close();
+
+        // Re-connect
+        await this.setupConnection();
+    }
+
+    private async getSystemContext(): Promise<string> {
+        try {
+            const hostname = await cockpit.spawn(["hostname"]).then(data => data.trim());
+            const osRelease = await cockpit.file("/etc/os-release").read();
+    
+            let prettyName = "Linux";
+            if (osRelease) {
+                const match = osRelease.match(/PRETTY_NAME="([^"]+)"/);
+                if (match) prettyName = match[1];
+            }
+    
+            const uptime = await cockpit.spawn(["uptime", "-p"]).then(data => data.trim());
+            const userInfo = cockpit.info.user;
+    
+            return `Hostname: ${hostname}
+    OS: ${prettyName}
+    Uptime: ${uptime}
+    Current Date: ${new Date().toLocaleString('en-US')}
+    Current User: ${userInfo.name} (id: ${userInfo.uid}; groups: ${userInfo.groups.join(", ")}; home: ${userInfo.home})
+    Running in Cockpit Web Console.
+    `;
+        } catch (e) {
+            console.error("Error gathering system context:", e);
+            return "System context unavailable.";
+        }
+    }
+
+    private async setupConnection() {
         // Initialize local server
         const localServer = new McpServerLocal({
             allow_shell_access: this.settings.allowShellAccess
@@ -75,7 +309,7 @@ export class Agent {
             }
         }
 
-        const sysInfo = await getSystemContext();
+        const sysInfo = await this.getSystemContext();
         this.systemContext = `
 You are a Linux System Administrator Copilot running in Cockpit.
 Your goal is to help the user manage this system safely and efficiently.
@@ -103,8 +337,25 @@ RULES:
         };
         this.messages = [...this.messages, msg];
         this.onUpdate(this.messages);
+        await this.saveCurrentChat();
 
         await this.runLoop();
+    }
+
+    public async regenerateLastResponse() {
+        if (this.isProcessing) return;
+
+        const lastMsg = this.messages[this.messages.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+            // Remove last assistant message
+            this.messages = this.messages.slice(0, -1);
+            
+            // Clear any pending approvals since we are backtracking
+            this.pendingApprovals = [];
+            
+            this.onUpdate(this.messages);
+            await this.runLoop();
+        }
     }
 
     // Resume loop after approval
@@ -180,17 +431,26 @@ RULES:
                     const toolName = call.function.name;
                     const toolArgs = safeJsonParse(call.function.arguments);
 
-                    // Ask for approval (pauses this specific tool execution)
-                    const approved = await new Promise<boolean>((resolve, reject) => {
-                        this.pendingApprovals.push({ toolCall: call, resolve, reject });
-                        this.onUpdate(this.messages);
-                    });
+                    const toolDef = tools.find((t: any) => t.tool.name === toolName);
+                    const isLowRisk = toolDef?.tool._meta?.isLowRisk ?? false;
+
+                    let approved = false;
+
+                    // Only auto-approve if explicitly marked as low risk
+                    if (isLowRisk) {
+                         approved = true;
+                    } else {
+                        // Ask for approval (pauses this specific tool execution)
+                        approved = await new Promise<boolean>((resolve, reject) => {
+                            this.pendingApprovals.push({ toolCall: call, resolve, reject });
+                            this.onUpdate(this.messages);
+                        });
+                    }
 
                     let resultOutput = "";
                     if (approved) {
                         try {
                             // EXECUTE TOOL
-                            const toolDef = tools.find((t: any) => t.tool.name === toolName);
                             if (toolDef) {
                                 resultOutput = await this.mcpManager.callTool(toolDef.serverId, toolDef.originalName, toolArgs);
                             } else {
@@ -237,6 +497,7 @@ RULES:
         } finally {
             this.isProcessing = false;
             this.onUpdate(this.messages);
+            await this.saveCurrentChat();
         }
     }
 
@@ -245,15 +506,8 @@ RULES:
         if (metadata?.title) {
             return metadata.title;
         }
-        if (metadata?.description) {
-            return metadata.description.split('\n')[0];
-        }
 
         // Fallback: Clean up raw name
-        const namePart = fullName.split("__").pop() || fullName;
-        return namePart
-            .split('_')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
+        return formatToolName(fullName);
     }
 }

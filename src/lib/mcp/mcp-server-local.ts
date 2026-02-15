@@ -12,6 +12,7 @@ import * as files from "./tools/files.js";
 import * as network from "./tools/network.js";
 import * as users from "./tools/users.js";
 import * as logs from "./tools/logs.js";
+import * as shell from "./tools/shell.js";
 
 // Plugins
 import { ToolPlugin } from "./plugins/base.js";
@@ -19,7 +20,6 @@ import { VmPlugin } from "./plugins/vm.js";
 import { ContainerPlugin } from "./plugins/containers.js";
 import { ZfsPlugin } from "./plugins/zfs.js";
 import { SmartPlugin } from "./plugins/smart.js";
-import * as shell from "./tools/shell.js";
 
 export type McpServerLocalOptions = {
     allow_shell_access: boolean;
@@ -63,6 +63,25 @@ export class McpServerLocal {
                     };
                 }
             );
+
+            // Sudo
+            this.server.registerTool(
+                "sudo_shell",
+                {
+                    title: "Sudo Shell",
+                    description: "Run a shell command with sudo",
+                    inputSchema: z.object({
+                        run_as: z.string().optional().describe("User to run as"),
+                        command: z.string().describe("Command to run in sudo")
+                    })
+                },
+                async ({ run_as, command }) => {
+                    const result = await shell.sudo(run_as || "root", command);
+                    return {
+                        content: [{ type: "text", text: result }]
+                    };
+                }
+            );
         }
 
         // Systemd
@@ -73,7 +92,8 @@ export class McpServerLocal {
                 description: "List all systemd units",
                 inputSchema: z.object({
                     scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ scope }) => {
                 const result = await systemd.listUnits(scope);
@@ -91,7 +111,8 @@ export class McpServerLocal {
                 inputSchema: z.object({
                     unit: z.string().describe("Unit name"),
                     scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ unit, scope }) => {
                 const result = await systemd.getStatus(unit, scope);
@@ -128,7 +149,8 @@ export class McpServerLocal {
                 description: "Search available packages",
                 inputSchema: z.object({
                     query: z.string().describe("Search query")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ query }) => {
                 const result = await packages.search(query);
@@ -179,6 +201,7 @@ export class McpServerLocal {
                 title: "List disks",
                 description: "List block devices (lsblk)",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
             },
             async () => {
                 const result = await disks.listDisks();
@@ -196,7 +219,8 @@ export class McpServerLocal {
                 description: "Read file contents",
                 inputSchema: z.object({
                     path: z.string().describe("Absolute path to file")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ path }) => {
                 const result = await files.readFile(path);
@@ -231,7 +255,8 @@ export class McpServerLocal {
                 description: "List directory contents",
                 inputSchema: z.object({
                     path: z.string().describe("Absolute path to directory")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ path }) => {
                 const result = await files.listDir(path);
@@ -247,12 +272,13 @@ export class McpServerLocal {
             {
                 title: "Network info",
                 description: "Show network interfaces and IPs",
-                inputSchema: z.object({})
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true },
             },
             async () => {
                 const result = await network.getInfo();
                 return {
-                    content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+                    content: [{ type: "text", text: result }]
                 };
             }
         );
@@ -281,7 +307,8 @@ export class McpServerLocal {
             {
                 title: "List users",
                 description: "List system users",
-                inputSchema: z.object({})
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
             },
             async () => {
                 const result = await users.listUsers();
@@ -317,7 +344,8 @@ export class McpServerLocal {
                 inputSchema: z.object({
                     service: z.string().optional().describe("Filter by systemd unit"),
                     lines: z.number().default(50).describe("Number of lines")
-                })
+                }),
+                _meta: { isLowRisk: true }
             },
             async ({ service, lines }) => {
                 const result = await logs.queryJournal(service, lines);
@@ -333,13 +361,71 @@ export class McpServerLocal {
             {
                 title: "System info",
                 description: "Get system hostname, OS, kernel, uptime",
-                inputSchema: z.object({})
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
             },
             async () => {
                 const result = await this.getSystemInfo();
                 return {
                     content: [{ type: "text", text: result }]
                 };
+            }
+        );
+
+        // User owned data
+        // ~/.local/share/cockpit/copilot-memory.json
+        const memoryPath = "$HOME/.local/share/cockpit/copilot-memory.json";
+        this.server.registerTool(
+            "memory_read",
+            {
+                title: "Read memory",
+                description: "Read memory about user's preferences and past conversations",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => {
+                try {
+                    const file = cockpit.file(memoryPath.replace("$HOME", cockpit.info.user.home));
+                    const result = await file.read();
+                    file.close();
+                    return {
+                        content: [{ type: "text", text: result }]
+                    };
+                } catch {
+                    return {
+                        content: [{ type: "text", text: 'No memory found' }]
+                    };
+                }
+            }
+        );
+
+        this.server.registerTool(
+            "memory_write",
+            {
+                title: "Write memory",
+                description: "Append memory about user's preferences and past conversations",
+                inputSchema: z.object({
+                    content: z.string().describe("Content to write")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ content }) => {
+                // Append content to memory file
+                let memory: string[] = [];
+                const file = cockpit.file(memoryPath.replace("$HOME", cockpit.info.user.home));
+                try {
+                    try {
+                        memory = JSON.parse(await file.read());
+                    } catch {
+                        // Ignore error
+                    }
+                    const result = await file.replace(JSON.stringify([...memory, content], null, 2));
+                    return {
+                        content: [{ type: "text", text: result }]
+                    };
+                } finally {
+                    file.close();
+                }
             }
         );
     }

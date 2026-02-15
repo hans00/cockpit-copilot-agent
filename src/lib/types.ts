@@ -8,6 +8,9 @@ export interface McpTool {
         properties?: Record<string, unknown>;
         required?: string[];
     };
+    _meta?: {
+        isLowRisk?: boolean; // If true, tool can be auto-approved
+    };
 }
 
 export interface McpServerConfig {
@@ -67,3 +70,12 @@ export interface ChatMessage {
     toolCalls?: ToolCall[];
     toolResult?: ToolResult;
 }
+
+export interface ChatSession {
+    id: string;
+    title: string;
+    messages: ChatMessage[];
+    lastModified: number;
+}
+
+export type ChatSessionSummary = Omit<ChatSession, "messages">;

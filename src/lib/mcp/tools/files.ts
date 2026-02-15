@@ -25,12 +25,8 @@ export async function writeFile(path: string, content: string): Promise<string> 
     }
 }
 
-export async function listDir(path: string): Promise<string> {
-    try {
-        // Use ls -F to get similar output to the Python implementation
-        const result = await cockpit.spawn(["ls", "-1F", path]);
-        return result;
-    } catch (e: any) {
-        return `Error listing directory: ${e.message || e}`;
-    }
+export async function listDir(path: string): Promise<string[]> {
+    // Use ls -F to get similar output to the Python implementation
+    const result = await cockpit.spawn(["ls", "-a1F", path]);
+    return result.split("\n").filter(line => line !== "." && line !== ".." && line !== "");
 }

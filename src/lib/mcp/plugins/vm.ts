@@ -29,6 +29,7 @@ export class VmPlugin extends ToolPlugin {
                 title: "List VMs",
                 description: "List all VMs with state (running, shut off)",
                 inputSchema: z.object({}),
+                _meta: { isLowRisk: true },
             },
             async () => {
                 const result = await this.runVirsh(["list", "--all"]);
@@ -45,7 +46,8 @@ export class VmPlugin extends ToolPlugin {
                 description: "Get detailed info about a specific VM",
                 inputSchema: z.object({
                     name: z.string().describe("Name of the VM")
-                })
+                }),
+                _meta: { isLowRisk: true },
             },
             async ({ name }) => {
                 const result = await this.runVirsh(["dominfo", name]);
@@ -113,7 +115,8 @@ export class VmPlugin extends ToolPlugin {
                 description: "List snapshots of a VM",
                 inputSchema: z.object({
                     name: z.string().describe("Name of the VM")
-                })
+                }),
+                _meta: { isLowRisk: true },
             },
             async ({ name }) => {
                 const result = await this.runVirsh(["snapshot-list", name]);

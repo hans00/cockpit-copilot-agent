@@ -8,8 +8,10 @@ import Message from '@patternfly/chatbot/dist/dynamic/Message';
 import MessageBar from '@patternfly/chatbot/dist/dynamic/MessageBar';
 import ToolCall from '@patternfly/chatbot/dist/dynamic/ToolCall';
 import ToolResponse from '@patternfly/chatbot/dist/dynamic/ToolResponse';
+import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { RobotIcon } from '@patternfly/react-icons';
+import { RobotIcon, RedoIcon } from '@patternfly/react-icons';
+import { ToolArguments } from "./ToolArguments.jsx";
 import { ChatMessage } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
 import { _ } from "../lib/i18n.js";
@@ -66,55 +68,93 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                     </EmptyState>
                 ) : (
                     <MessageBox>
-                        {messages.map((msg) => {
+                        {messages.map((msg, index) => {
+                            const messageElements = [];
+
                             if (msg.role === 'tool') {
                                 const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
-                                return (
+                                messageElements.push(
                                     <ToolResponse
                                         key={msg.id}
                                         toggleContent={<>{tToolCalling}: <strong>{toolName}</strong></>}
                                         body={(
-                                            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
-                                                {msg.content || msg.toolResult?.output || ""}
-                                            </pre>
+                                            <div>
+                                                {msg.toolResult?.toolCallId && messages.find(m => m.toolCalls?.some(tc => tc.id === msg.toolResult?.toolCallId))?.toolCalls?.find(tc => tc.id === msg.toolResult?.toolCallId) && (
+                                                    <div style={{ marginBottom: '1rem' }}>
+                                                        <ToolArguments args={JSON.parse(messages.find(m => m.toolCalls?.some(tc => tc.id === msg.toolResult?.toolCallId))?.toolCalls?.find(tc => tc.id === msg.toolResult?.toolCallId)?.function.arguments || "{}")} />
+                                                    </div>
+                                                )}
+                                                <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                                                    {msg.content || msg.toolResult?.output || ""}
+                                                </pre>
+                                            </div>
                                         )}
                                         isBodyMarkdown={false}
                                         isDefaultExpanded={false}
                                     />
                                 );
-                            }
+                            } else {
+                                messageElements.push(
+                                    <Message
+                                        key={msg.id}
+                                        role={msg.role === 'user' ? 'user' : 'bot'}
+                                        content={msg.content}
+                                        name={msg.role === 'user' ? tYou : tCopilot}
+                                    />
+                                );
 
-                            return (
-                                <Message
-                                    key={msg.id}
-                                    role={msg.role === 'user' ? 'user' : 'bot'}
-                                    content={msg.content}
-                                    name={msg.role === 'user' ? tYou : tCopilot}
-                                />
-                            );
-                        })}
+                                // Render associated tool calls inline
+                                if (msg.role === 'assistant' && msg.toolCalls) {
+                                    msg.toolCalls.forEach(tc => {
+                                        const isPending = agent.pendingApprovals.some(p => p.toolCall.id === tc.id);
+                                        const isDone = messages.some(m => m.role === 'tool' && m.toolResult?.toolCallId === tc.id);
 
-                        {/* Pending Approvals */}
-                        {agent.pendingApprovals.map((approval) => (
-                             <ToolCall
-                                key={approval.toolCall.id}
-                                titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(approval.toolCall.function.name)}`}
-                                runButtonText={tApproveRun}
-                                cancelButtonText={tReject}
-                                runButtonProps={{
-                                    onClick: () => agent.approveToolCall(approval.toolCall.id)
-                                }}
-                                cancelButtonProps={{
-                                    onClick: () => agent.rejectToolCall(approval.toolCall.id)
-                                }}
-                                expandableContent={
-                                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
-                                        {JSON.stringify(JSON.parse(approval.toolCall.function.arguments), null, 2)}
-                                    </pre>
+                                        // Only render if pending or processing (not done)
+                                        if (!isDone) {
+                                            messageElements.push(
+                                                <ToolCall
+                                                    key={tc.id}
+                                                    titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(tc.function.name)}`}
+                                                    runButtonText={isPending ? tApproveRun : _("Running...")}
+                                                    cancelButtonText={tReject}
+                                                    runButtonProps={{
+                                                        onClick: () => agent.approveToolCall(tc.id),
+                                                        isDisabled: !isPending,
+                                                        isLoading: !isPending
+                                                    }}
+                                                    cancelButtonProps={{
+                                                        onClick: () => agent.rejectToolCall(tc.id),
+                                                        isDisabled: !isPending
+                                                    }}
+                                                    expandableContent={
+                                                        <ToolArguments args={JSON.parse(tc.function.arguments)} />
+                                                    }
+                                                    isDefaultExpanded
+                                                />
+                                            );
+                                        }
+                                    });
                                 }
-                                isDefaultExpanded
-                            />
-                        ))}
+
+                                // Show regenerate button for the very last message if it is an assistant message
+                                const isLastMessage = index === messages.length - 1;
+                                if (isLastMessage && msg.role === 'assistant' && !isProcessing && !agent.pendingApprovals.length) {
+                                    messageElements.push(
+                                        <div key="actions" style={{ marginLeft: '3.5rem', marginTop: '0.5rem' }}>
+                                             <Button 
+                                                variant="link" 
+                                                icon={<RedoIcon />} 
+                                                onClick={() => agent.regenerateLastResponse()}
+                                                size="sm"
+                                            >
+                                                {_("Regenerate")}
+                                            </Button>
+                                        </div>
+                                    );
+                                }
+                            }
+                            return messageElements;
+                        })}
 
                         {isProcessing && !hasPendingApprovals && (
                              <Message role="bot" isLoading loadingWord={tThinking} />
