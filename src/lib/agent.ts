@@ -222,6 +222,14 @@ export class Agent {
             if (session.title === "New Chat" && this.messages.length > 0) {
                  const firstMsg = this.messages.find(m => m.role === 'user');
                  if (firstMsg) {
+                     // Start generation in background
+                     this.generateTitle(this.messages).then(title => {
+                         if (title && this.history[this.currentChatId!] && this.history[this.currentChatId!].title === "New Chat") {
+                             this.history[this.currentChatId!].title = title;
+                             this.saveCurrentChat();
+                         }
+                     });
+                     // Temporary fallback while generating
                      session.title = firstMsg.content.slice(0, 30) + (firstMsg.content.length > 30 ? "..." : "");
                  }
             }
@@ -509,5 +517,31 @@ RULES:
 
         // Fallback: Clean up raw name
         return formatToolName(fullName);
+    }
+
+    private async generateTitle(messages: ChatMessage[]): Promise<string> {
+        try {
+            // Create a separate context for title generation to avoid polluting the main context
+            const titleMessages: ChatMessage[] = [
+                {
+                    id: "system-title",
+                    role: "system",
+                    content: "You are a helpful assistant. Summarize the user's request into a concise title (max 5 words). return the title only. Do not use quotes or punctuation."
+                },
+                ...messages.filter(m => m.role === 'user').slice(0, 1) // Only use the first user message for speed/relevance
+            ];
+            
+            // We use a separate non-streaming call if possible, but LlmClient is streaming-focused.
+            // We can just use the same client and collect the output.
+            let title = "";
+            await this.llm.chatCompletion(titleMessages, [], (chunk) => {
+                title += chunk;
+            });
+            
+            return title.trim().replace(/^["']|["']$/g, '');
+        } catch (e) {
+            console.error("Error generating title:", e);
+            return "";
+        }
     }
 }
