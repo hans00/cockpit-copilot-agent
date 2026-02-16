@@ -43,9 +43,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@patternfly/chatbot": "^6.5.0",
-    "@patternfly/patternfly": "6.1.0",
-    "@patternfly/react-core": "6.1.0",
-    "@patternfly/react-icons": "6.1.0",
+    "@patternfly/patternfly": "6.4.0",
+    "@patternfly/react-core": "6.4.1",
+    "@patternfly/react-icons": "6.4.0",
     "@patternfly/react-styles": "6.4.0",
     "@types/marked": "^5.0.2",
     "@types/uuid": "^10.0.0",
