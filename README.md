@@ -2,6 +2,8 @@
 
 An AI Copilot Agent for Cockpit that helps manage your Linux system.
 
+See the [product and architecture roadmap](docs/ROADMAP.md) for planned task lifecycle, performance, history, policy, verification, and automation improvements.
+
 # Development dependencies
 
 On Debian/Ubuntu:
