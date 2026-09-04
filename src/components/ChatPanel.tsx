@@ -14,6 +14,7 @@ import { RobotIcon, RedoIcon } from '@patternfly/react-icons';
 import { ToolArguments } from "./ToolArguments.jsx";
 import { ChatMessage } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
+import { diagnostics, type DiagnosticSpan } from "../lib/diagnostics.js";
 import { _ } from "../lib/i18n.js";
 
 import "@patternfly/chatbot/dist/css/main.css";
@@ -24,8 +25,33 @@ interface ChatPanelProps {
     isProcessing: boolean;
 }
 
+let startupTotalSpan: DiagnosticSpan | null = null;
+
+/**
+ * The app starts this span before Agent.init(), while ChatPanel is the only
+ * module that can observe the mounted, usable MessageBar input.
+ */
+export const setStartupTotalSpan = (span: DiagnosticSpan | null): void => {
+    startupTotalSpan = span;
+};
+
+export const finishStartupTotal = (status: "ready" | "error"): void => {
+    if (!startupTotalSpan)
+        return;
+
+    const span = startupTotalSpan;
+    startupTotalSpan = null;
+    diagnostics.end(span, { status });
+    if (status === "ready")
+        diagnostics.record("startup.ready", { status: "ready" });
+};
+
 export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcessing }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
+    const messageInputRef = useRef<HTMLTextAreaElement>(null);
+    const chatMountedRecordedRef = useRef(false);
+    const inputReadyRecordedRef = useRef(false);
+    const hasPendingApprovals = agent.pendingApprovals.length > 0;
 
     const parseToolArguments = (value: string): Record<string, unknown> => {
         try {
@@ -45,12 +71,37 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
         }
     }, [messages, agent.pendingApprovals, isProcessing]);
 
+    useEffect(() => {
+        if (!diagnostics.isEnabled())
+            return;
+
+        if (!chatMountedRecordedRef.current) {
+            chatMountedRecordedRef.current = true;
+            diagnostics.record("startup.chat_mounted", { status: "ready" });
+        }
+
+        const recordInputReady = () => {
+            const messageInput = messageInputRef.current;
+            if (messageInput && !messageInput.disabled && !inputReadyRecordedRef.current) {
+                inputReadyRecordedRef.current = true;
+                diagnostics.record("startup.input_ready", { status: "ready" });
+                finishStartupTotal("ready");
+            }
+        };
+
+        // Refs are normally populated before effects run. The frame also
+        // covers MessageBar implementations that assign the ref one frame
+        // after the parent has mounted.
+        recordInputReady();
+        const frame = window.requestAnimationFrame(recordInputReady);
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [hasPendingApprovals, isProcessing]);
+
     const handleSendMessage = async (message: string) => {
         if (!message.trim()) return;
         await agent.addUserMessage(message);
     };
-
-    const hasPendingApprovals = agent.pendingApprovals.length > 0;
 
     // Extract strings for translation to ensure xgettext picks them up
     const tCockpitCopilot = _("Cockpit Copilot");
@@ -180,6 +231,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                 <MessageBar
                     onSendMessage={(msg) => handleSendMessage(String(msg))}
                     placeholder={tPlaceholder}
+                    innerRef={messageInputRef}
                     isSendButtonDisabled={isProcessing || hasPendingApprovals}
                     hasAttachButton={false} // Disable attachments for now as logic isn't ported
                 />

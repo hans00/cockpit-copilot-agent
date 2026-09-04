@@ -2,6 +2,7 @@
 import cockpit, { Spawn } from "cockpit";
 import OpenAI from "openai";
 import { ChatMessage, ToolCall, McpTool } from "./types.js";
+import { diagnostics } from "./diagnostics.js";
 
 const genId = (prefix: string) =>
     `${prefix}_${Math.random().toString(36)
@@ -16,6 +17,24 @@ interface LlmConfig {
 
 const LLM_REQUEST_TIMEOUT_MS = 120000;
 const HOST_LLM_PROXY_PATH = "/usr/libexec/cockpit-copilot-agent-llm-proxy";
+
+const createAbortError = (): Error =>
+    typeof DOMException !== "undefined"
+        ? new DOMException("Request aborted", "AbortError")
+        : Object.assign(new Error("Request aborted"), { name: "AbortError" });
+
+const isAbortError = (error: unknown): boolean =>
+    (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") ||
+    (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError");
+
+const responsePayloadBytes = (message: ChatMessage): number => {
+    let bytes = diagnostics.textBytes(message.content || "");
+    for (const call of message.toolCalls || []) {
+        bytes += diagnostics.textBytes(call.function.name);
+        bytes += diagnostics.textBytes(call.function.arguments);
+    }
+    return bytes;
+};
 
 interface PartialToolCall {
     id: string;
@@ -42,6 +61,11 @@ interface HostRequest {
     messages: unknown[];
     tools: unknown[];
 }
+
+type LlmMetricCallbacks = {
+    onText: (chunk: string) => void;
+    onToolCall: (name?: string, argumentsText?: string) => void;
+};
 
 export class LlmClient {
     private client: OpenAI;
@@ -129,8 +153,100 @@ export class LlmClient {
             tools: openAiTools || []
         };
 
+        const requestStage = diagnostics.start("llm.request");
+        const firstResponseStage = diagnostics.start("llm.first_response");
+        const firstTextStage = diagnostics.start("llm.first_text");
+        const firstToolCallStage = diagnostics.start("llm.first_tool_call");
+        let firstResponseReceived = false;
+        let firstTextReceived = false;
+        let firstToolCallReceived = false;
+        const logicalRequestBytes = requestStage
+            ? diagnostics.jsonBytes({
+                model: this.model,
+                messages: openAiMessages,
+                tools: openAiTools || []
+            })
+            : undefined;
+        const metricCallbacks: LlmMetricCallbacks | undefined = requestStage
+            ? {
+                onText: (chunk: string) => {
+                    if (!chunk)
+                        return;
+                    if (firstResponseStage && !firstResponseReceived) {
+                        firstResponseReceived = true;
+                        diagnostics.end(firstResponseStage, {
+                            status: "received",
+                            responseEvent: "text"
+                        });
+                    }
+                    if (firstTextStage && !firstTextReceived) {
+                        firstTextReceived = true;
+                        diagnostics.end(firstTextStage, {
+                            status: "received",
+                            firstTextBytes: diagnostics.textBytes(chunk)
+                        });
+                    }
+                },
+                onToolCall: (name?: string, argumentsText?: string) => {
+                    if (firstResponseStage && !firstResponseReceived) {
+                        firstResponseReceived = true;
+                        diagnostics.end(firstResponseStage, {
+                            status: "received",
+                            responseEvent: "tool_call"
+                        });
+                    }
+                    if (firstToolCallStage && !firstToolCallReceived) {
+                        firstToolCallReceived = true;
+                        diagnostics.end(firstToolCallStage, {
+                            status: "received",
+                            firstToolCallBytes: diagnostics.textBytes(name || "") +
+                                diagnostics.textBytes(argumentsText || "")
+                        });
+                    }
+                }
+            }
+            : undefined;
+        const handleChunk = metricCallbacks
+            ? (chunk: string) => {
+                metricCallbacks.onText(chunk);
+                onChunk?.(chunk);
+            }
+            : onChunk;
+        const finishRequest = (status: string, response?: ChatMessage, error?: unknown): void => {
+            if (firstResponseStage && !firstResponseReceived)
+                diagnostics.end(firstResponseStage, { status: "not_received" });
+            if (firstTextStage && !firstTextReceived)
+                diagnostics.end(firstTextStage, { status: "not_received" });
+            if (firstToolCallStage && !firstToolCallReceived)
+                diagnostics.end(firstToolCallStage, { status: "not_received" });
+            if (!requestStage)
+                return;
+            const fields = {
+                status: signal?.aborted || isAbortError(error) ? "aborted" : status,
+                transport: this.useHostProxy ? "host_proxy" : "direct",
+                messageCount: openAiMessages.length,
+                toolCount: tools.length,
+                logicalRequestBytes,
+                logicalResponseBytes: response ? responsePayloadBytes(response) : undefined,
+                responseToolCallCount: response?.toolCalls?.length
+            };
+            diagnostics.end(requestStage, fields);
+        };
+
         if (this.useHostProxy) {
-            return this.chatCompletionViaHost(requestPayload, onChunk, signal);
+            try {
+                const response = await this.chatCompletionViaHost(
+                    requestPayload,
+                    handleChunk,
+                    metricCallbacks?.onToolCall,
+                    signal
+                );
+                finishRequest("ok", response);
+                return response;
+            } catch (error) {
+                finishRequest("error", undefined, error);
+                throw error;
+            }
         }
 
         try {
@@ -152,10 +268,17 @@ export class LlmClient {
 
                 if (delta?.content) {
                     fullContent += delta.content;
-                    if (onChunk) onChunk(delta.content);
+                    handleChunk?.(delta.content);
                 }
 
                 if (delta?.tool_calls) {
+                    if (delta.tool_calls.length > 0) {
+                        const firstToolCall = delta.tool_calls[0];
+                        metricCallbacks?.onToolCall(
+                            firstToolCall.function?.name,
+                            firstToolCall.function?.arguments
+                        );
+                    }
                     for (const tc of delta.tool_calls) {
                         const idx = tc.index ?? toolCallsMap.size;
                         if (!toolCallsMap.has(idx)) {
@@ -185,21 +308,22 @@ export class LlmClient {
 
             const id = `msg_${Date.now()}`;
 
-            if (toolCalls.length === 0) {
-                return {
+            const response: ChatMessage = toolCalls.length === 0
+                ? {
                     id,
                     role: "assistant",
                     content: fullContent,
-                };
-            } else {
-                return {
+                }
+                : {
                     id,
                     role: "assistant",
                     content: fullContent,
                     toolCalls
                 };
-            }
+            finishRequest("ok", response);
+            return response;
         } catch (e) {
+            finishRequest("error", undefined, e);
             console.error("LLM Error:", e);
             throw e;
         }
@@ -208,6 +332,7 @@ export class LlmClient {
     private async chatCompletionViaHost(
         requestPayload: HostRequest,
         onChunk?: (chunk: string) => void,
+        onToolCall?: (name?: string, argumentsText?: string) => void,
         signal?: AbortSignal
     ): Promise<ChatMessage> {
         const process: Spawn<string> = cockpit.spawn([HOST_LLM_PROXY_PATH], { pty: false });
@@ -231,10 +356,21 @@ export class LlmClient {
         };
 
         const response = new Promise<ChatMessage>((resolve, reject) => {
+            const abortListener = () => {
+                // Cockpit resolves a spawn when the channel closes cleanly.
+                // Settle first so that close() cannot turn an aborted partial
+                // response into a successful message.
+                finish(createAbortError());
+                process.close("cancelled");
+            };
+            const cleanup = () => {
+                signal?.removeEventListener("abort", abortListener);
+            };
             const finish = (error?: Error) => {
                 if (settled)
                     return;
                 settled = true;
+                cleanup();
                 if (error)
                     reject(error);
                 else
@@ -245,6 +381,7 @@ export class LlmClient {
                     content += event.content;
                     onChunk?.(event.content);
                 } else if (event.type === "tool_call") {
+                    onToolCall?.(event.name, event.arguments);
                     const index = event.index || 0;
                     const call = toolCalls.get(index) || { id: "", name: "", args: "" };
                     if (event.id) call.id = event.id;
@@ -284,11 +421,14 @@ export class LlmClient {
             process.fail(error => finish(error));
 
             if (signal?.aborted) {
-                process.close();
-                finish(new DOMException("Request aborted", "AbortError"));
+                abortListener();
                 return;
             }
-            signal?.addEventListener("abort", () => process.close(), { once: true });
+            signal?.addEventListener("abort", abortListener, { once: true });
+            if (signal?.aborted) {
+                abortListener();
+                return;
+            }
             process.input(JSON.stringify(requestPayload));
         });
 

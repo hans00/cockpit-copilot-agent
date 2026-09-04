@@ -446,8 +446,10 @@ export class McpServerLocal {
         }
     }
 
-    async init() {
-        // Initialize plugins
+    async initOptionalPlugins(signal?: AbortSignal): Promise<void> {
+        // Optional plugin detection is deliberately separate from construction:
+        // core tools are registered synchronously in the constructor so the
+        // local server can connect before probing optional host capabilities.
         const allPlugins = [
             new VmPlugin(),
             new ContainerPlugin(),
@@ -455,14 +457,20 @@ export class McpServerLocal {
             new SmartPlugin()
         ];
 
+        if (signal?.aborted)
+            throw new DOMException("Optional plugin setup aborted", "AbortError");
+
         const detected = await Promise.all(allPlugins.map(async plugin => ({
             plugin,
             available: await plugin.detect()
         })));
         for (const { plugin, available } of detected) {
+            if (signal?.aborted)
+                throw new DOMException("Optional plugin setup aborted", "AbortError");
             if (available) {
                 this.plugins.push(plugin);
-                // Register plugin tools
+                // McpServer 1.26.0 sends tools/list_changed after registration
+                // when the server is already connected.
                 plugin.register(this.server);
             }
         }

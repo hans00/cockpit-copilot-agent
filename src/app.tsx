@@ -6,7 +6,7 @@ import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.
 import { Modal, ModalVariant, ModalHeader, ModalBody } from "@patternfly/react-core/dist/esm/components/Modal/index.js";
 import { CogIcon, BarsIcon } from '@patternfly/react-icons';
 
-import { ChatPanel } from "./components/ChatPanel.jsx";
+import { ChatPanel, finishStartupTotal, setStartupTotalSpan } from "./components/ChatPanel.jsx";
 import { SettingsPage } from "./components/SettingsPage.jsx";
 import { Agent } from "./lib/agent.js";
 import { McpClientManager } from "./lib/mcp-client.js";
@@ -17,6 +17,7 @@ import { ChatMessage, ChatSessionSummary, CopilotSettings } from "./lib/types.js
 import { ChatHistorySidebar } from "./components/ChatHistorySidebar.jsx";
 import { Drawer, DrawerContent, DrawerContentBody, DrawerPanelContent } from "@patternfly/react-core/dist/esm/components/Drawer/index.js";
 import { _ } from "./lib/i18n.js";
+import { diagnostics } from "./lib/diagnostics.js";
 
 import "./app.scss";
 
@@ -104,30 +105,58 @@ export const Application = () => {
     }, []);
 
     const initAgent = async (): Promise<Agent> => {
-        await ensureCockpitReady();
-        const [settings, creds] = await Promise.all([
-            loadSettings(),
-            readCredentials()
-        ]);
-        setSettingsSnapshot(settings);
-        setApiKeySnapshot(creds.apiKey || "");
-        const mcpManager = new McpClientManager();
-
-        if (creds.apiKey) {
-            settings.llm.apiKey = creds.apiKey;
-        }
-
-        const newAgent = new Agent(settings, mcpManager, (msgs) => {
-            setMessages([...msgs]);
-            setIsProcessing(newAgent.isProcessing);
-            setHistory(newAgent.getHistory());
-        });
-
+        const totalStage = diagnostics.start("startup.total");
+        setStartupTotalSpan(totalStage);
         try {
-            await newAgent.init();
+            const cockpitStage = diagnostics.start("startup.cockpit_ready");
+            try {
+                await ensureCockpitReady();
+                diagnostics.end(cockpitStage, { status: "ok" });
+            } catch (error) {
+                diagnostics.end(cockpitStage, { status: "error" });
+                throw error;
+            }
+
+            const settingsStage = diagnostics.start("startup.settings_credentials");
+            let settings: CopilotSettings;
+            let creds: Awaited<ReturnType<typeof readCredentials>>;
+            try {
+                [settings, creds] = await Promise.all([
+                    loadSettings(),
+                    readCredentials()
+                ]);
+                diagnostics.end(settingsStage, { status: "ok" });
+            } catch (error) {
+                diagnostics.end(settingsStage, { status: "error" });
+                throw error;
+            }
+            setSettingsSnapshot(settings);
+            setApiKeySnapshot(creds.apiKey || "");
+            const mcpManager = new McpClientManager();
+
+            if (creds.apiKey) {
+                settings.llm.apiKey = creds.apiKey;
+            }
+
+            const newAgent = new Agent(settings, mcpManager, (msgs) => {
+                setMessages([...msgs]);
+                setIsProcessing(newAgent.isProcessing);
+                setHistory(newAgent.getHistory());
+            });
+
+            const agentStage = diagnostics.start("startup.agent_init");
+            try {
+                await newAgent.init();
+                diagnostics.end(agentStage, { status: "ok" });
+            } catch (error) {
+                diagnostics.end(agentStage, { status: "error" });
+                await newAgent.close().catch(closeError => console.error("Failed to clean up initialization:", closeError));
+                throw error;
+            }
+            diagnostics.record("startup.agent_ready", { status: "ready" });
             return newAgent;
         } catch (error) {
-            await newAgent.close().catch(closeError => console.error("Failed to clean up initialization:", closeError));
+            finishStartupTotal("error");
             throw error;
         }
     };
