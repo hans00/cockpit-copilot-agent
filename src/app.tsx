@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import cockpit from "cockpit";
 import { Title } from "@patternfly/react-core/dist/esm/components/Title/index.js";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
-import { Modal, ModalVariant, ModalHeader, ModalBody, ModalFooter } from "@patternfly/react-core/dist/esm/components/Modal/index.js";
+import { Modal, ModalVariant, ModalHeader, ModalBody } from "@patternfly/react-core/dist/esm/components/Modal/index.js";
 import { CogIcon, BarsIcon } from '@patternfly/react-icons';
 
 import { ChatPanel } from "./components/ChatPanel.jsx";
@@ -12,12 +12,24 @@ import { Agent } from "./lib/agent.js";
 import { McpClientManager } from "./lib/mcp-client.js";
 import { loadSettings } from "./lib/settings.js";
 import { readCredentials } from "./lib/credentials.js";
-import { ChatMessage, ChatSession, ChatSessionSummary } from "./lib/types.js";
+import { ensureCockpitReady } from "./lib/cockpit-ready.js";
+import { ChatMessage, ChatSessionSummary, CopilotSettings } from "./lib/types.js";
 import { ChatHistorySidebar } from "./components/ChatHistorySidebar.jsx";
 import { Drawer, DrawerContent, DrawerContentBody, DrawerPanelContent } from "@patternfly/react-core/dist/esm/components/Drawer/index.js";
 import { _ } from "./lib/i18n.js";
 
 import "./app.scss";
+
+type AdminPermission = {
+    allowed: boolean | null;
+    addEventListener(event: "changed", listener: () => void): void;
+    removeEventListener(event: "changed", listener: () => void): void;
+    close(): void;
+};
+
+const cockpitWithPermission = cockpit as typeof cockpit & {
+    permission(options: { admin: true }): AdminPermission;
+};
 
 export const Application = () => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -26,25 +38,56 @@ export const Application = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
-    
+    const [initError, setInitError] = useState<string | null>(null);
+    const [isRetrying, setIsRetrying] = useState(false);
+    const [settingsSnapshot, setSettingsSnapshot] = useState<CopilotSettings | null>(null);
+    const [apiKeySnapshot, setApiKeySnapshot] = useState("");
+
     // History state
     const [history, setHistory] = useState<ChatSessionSummary[]>([]);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
     // Initialize Agent on mount
     useEffect(() => {
-        initAgent();
+        let disposed = false;
+        let initializedAgent: Agent | null = null;
+
+        const initialize = async () => {
+            setInitError(null);
+            setIsRetrying(true);
+            try {
+                const newAgent = await initAgent();
+                if (disposed) {
+                    await newAgent.close();
+                    return;
+                }
+                initializedAgent = newAgent;
+                setAgent(newAgent);
+                setIsAgentInit(true);
+                setHistory(newAgent.getHistory());
+            } catch (error) {
+                console.error("Failed to initialize agent", error);
+                if (!disposed)
+                    setInitError(String(error));
+            } finally {
+                if (!disposed)
+                    setIsRetrying(false);
+            }
+        };
+
+        initialize();
+
+        let cleanupPermission = () => {};
 
         try {
-            const permission = cockpit.permission({ admin: true });
+            const permission = cockpitWithPermission.permission({ admin: true });
             const updateAdmin = () => {
                 setIsAdmin(!!permission.allowed);
             };
 
             permission.addEventListener("changed", updateAdmin);
             updateAdmin();
-
-            return () => {
+            cleanupPermission = () => {
                 permission.removeEventListener("changed", updateAdmin);
                 permission.close();
             };
@@ -52,13 +95,23 @@ export const Application = () => {
             console.error("Failed to get permission", e);
             setIsAdmin(false);
         }
+
+        return () => {
+            disposed = true;
+            cleanupPermission();
+            initializedAgent?.close().catch(error => console.error("Failed to close agent:", error));
+        };
     }, []);
 
-    const initAgent = async () => {
-        const settings = await loadSettings();
+    const initAgent = async (): Promise<Agent> => {
+        await ensureCockpitReady();
+        const [settings, creds] = await Promise.all([
+            loadSettings(),
+            readCredentials()
+        ]);
+        setSettingsSnapshot(settings);
+        setApiKeySnapshot(creds.apiKey || "");
         const mcpManager = new McpClientManager();
-
-        const creds = await readCredentials();
 
         if (creds.apiKey) {
             settings.llm.apiKey = creds.apiKey;
@@ -70,10 +123,13 @@ export const Application = () => {
             setHistory(newAgent.getHistory());
         });
 
-        await newAgent.init();
-        setAgent(newAgent);
-        setIsAgentInit(true);
-        setHistory(newAgent.getHistory());
+        try {
+            await newAgent.init();
+            return newAgent;
+        } catch (error) {
+            await newAgent.close().catch(closeError => console.error("Failed to clean up initialization:", closeError));
+            throw error;
+        }
     };
 
     return (
@@ -88,15 +144,15 @@ export const Application = () => {
             }}
             >
                 <div>
-                     <Button 
-                        variant="plain" 
-                        onClick={() => setIsHistoryOpen(!isHistoryOpen)} 
+                    <Button
+                        variant="plain"
+                        onClick={() => setIsHistoryOpen(!isHistoryOpen)}
                         aria-label={isHistoryOpen ? _("Close history") : _("Open history")}
                         style={{ marginRight: '1rem' }}
-                     >
+                    >
                         <BarsIcon />
-                     </Button>
-                     <Title headingLevel="h1" size="lg" style={{ display: 'inline' }}>{_("Copilot Agent")}</Title>
+                    </Button>
+                    <Title headingLevel="h1" size="lg" style={{ display: 'inline' }}>{_("Copilot Agent")}</Title>
                 </div>
                 {isAdmin && (
                     <Button variant="plain" onClick={() => setIsSettingsOpen(true)} aria-label={_("Settings")}>
@@ -110,36 +166,51 @@ export const Application = () => {
                 <Drawer isExpanded={isHistoryOpen} isInline>
                     <DrawerContent panelContent={
                         <DrawerPanelContent isResizable defaultSize="250px" minSize="150px">
-                             {agent && (
-                                <ChatHistorySidebar 
+                            {agent && (
+                                <ChatHistorySidebar
                                     history={history}
                                     currentChatId={agent.currentChatId}
                                     onSelectChat={async (id) => {
                                         await agent.switchToChat(id);
                                     }}
                                     onCreateChat={async () => {
-                                        await agent.createChat();
+                                        await agent.createNewChat();
                                     }}
                                     onDeleteChat={async (id, e) => {
                                         e.stopPropagation();
                                         await agent.deleteChat(id);
                                     }}
                                 />
-                             )}
+                            )}
                         </DrawerPanelContent>
-                    }>
+                    }
+                    >
                         <DrawerContentBody style={{ display: 'flex', flexDirection: 'column' }}>
-                             {agent && isAgentInit
+                            {initError
                                 ? (
-                                    <ChatPanel
+                                    <div style={{ padding: "2rem" }}>
+                                        <Title headingLevel="h2" size="lg">{_("Agent initialization failed")}</Title>
+                                        <p>{initError}</p>
+                                        <Button
+                                            variant="primary"
+                                            onClick={() => window.location.reload()}
+                                            isDisabled={isRetrying}
+                                        >
+                                            {_("Retry")}
+                                        </Button>
+                                    </div>
+                                )
+                                : agent && isAgentInit
+                                    ? (
+                                        <ChatPanel
                                         agent={agent}
                                         messages={messages}
                                         isProcessing={isProcessing}
-                                    />
-                                )
-                                : (
-                                    <div style={{ padding: "2rem" }}>{_("Initializing Agent...")}</div>
-                                )}
+                                        />
+                                    )
+                                    : (
+                                        <div style={{ padding: "2rem" }}>{_("Initializing Agent...")}</div>
+                                    )}
                         </DrawerContentBody>
                     </DrawerContent>
                 </Drawer>
@@ -161,19 +232,26 @@ export const Application = () => {
                             </i>
                         </div>
                     )}
-                    <SettingsPage 
-                        isAdmin={isAdmin} 
-                        onSettingsChange={async () => {
-                            if (agent) {
-                                const newSettings = await loadSettings();
-                                const creds = await readCredentials();
-                                if (creds.apiKey) {
-                                    newSettings.llm.apiKey = creds.apiKey;
+                    {isSettingsOpen && (
+                        <SettingsPage
+                            isAdmin={isAdmin}
+                            initialSettings={settingsSnapshot || undefined}
+                            initialApiKey={apiKeySnapshot}
+                            onSettingsChange={async () => {
+                                if (agent) {
+                                    const [newSettings, creds] = await Promise.all([
+                                        loadSettings(),
+                                        readCredentials()
+                                    ]);
+                                    if (creds.apiKey)
+                                        newSettings.llm.apiKey = creds.apiKey;
+                                    await agent.reconfigure(newSettings);
+                                    setSettingsSnapshot(newSettings);
+                                    setApiKeySnapshot(creds.apiKey || "");
                                 }
-                                await agent.reconfigure(newSettings);
-                            }
-                        }}
-                    />
+                            }}
+                        />
+                    )}
                 </ModalBody>
             </Modal>
         </div>

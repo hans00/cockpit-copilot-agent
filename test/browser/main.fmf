@@ -1,7 +1,7 @@
 summary:
     Run browser integration tests on the host
 require:
-  - cockpit-starter-kit
+  - cockpit-copilot-agent
   - podman
   - cockpit-ws
   - cockpit-system

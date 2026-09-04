@@ -15,15 +15,25 @@ import { CopilotSettings, DEFAULT_SETTINGS } from "../lib/types.js";
 import { McpServerList } from "./McpServerList.jsx";
 import { _ } from "../lib/i18n.js";
 
-export const SettingsPage: React.FC<{ isAdmin?: boolean; onSettingsChange?: () => void }> = (props) => {
+export const SettingsPage: React.FC<{
+    isAdmin?: boolean;
+    initialSettings?: CopilotSettings | undefined;
+    initialApiKey?: string | undefined;
+    onSettingsChange?: () => void | Promise<void>;
+}> = (props) => {
     const { isAdmin = false } = props;
-    const [settings, setSettings] = useState<CopilotSettings>(DEFAULT_SETTINGS);
-    const [apiKey, setApiKey] = useState("");
+    const [settings, setSettings] = useState<CopilotSettings>(props.initialSettings || DEFAULT_SETTINGS);
+    const [apiKey, setApiKey] = useState(props.initialApiKey || "");
     const [statusMsg, setStatusMsg] = useState<{ type: "success" | "danger", text: string } | null>(null);
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (props.initialSettings) {
+            setSettings(props.initialSettings);
+            setApiKey(props.initialApiKey || "");
+        } else {
+            loadData();
+        }
+    }, [props.initialApiKey, props.initialSettings]);
 
     const loadData = async () => {
         const s = await loadSettings();
@@ -46,9 +56,7 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean; onSettingsChange?: () =
                 provider: settings.llm.provider
             });
             setStatusMsg({ type: "success", text: _("Settings saved successfully.") });
-            if (props.onSettingsChange) {
-                props.onSettingsChange();
-            }
+            await props.onSettingsChange?.();
         } catch (e) {
             setStatusMsg({ type: "danger", text: _("Failed to save settings: ") + e });
         }
@@ -67,7 +75,7 @@ export const SettingsPage: React.FC<{ isAdmin?: boolean; onSettingsChange?: () =
                     <FormSelect
                         value={settings.llm.provider}
                         onChange={(_e, val) => {
-                            const provider = val as any;
+                            const provider = val as CopilotSettings["llm"]["provider"];
                             let baseUrl = settings.llm.baseUrl;
                             if (provider === "gemini") {
                                 baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";

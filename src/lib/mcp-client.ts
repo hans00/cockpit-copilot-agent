@@ -7,12 +7,28 @@ import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { McpServerConfig, McpTool } from "./types.js";
 import { LocalTransport } from "./mcp/local-transport.js";
 
-// Custom Transport for Cockpit Spawn (Stdio)
+const MCP_REQUEST_TIMEOUT_MS = 10000;
+const MAX_TOOL_OUTPUT_LENGTH = 64 * 1024;
+
+type RemoteTool = {
+    name: string;
+    title?: string;
+    description?: string;
+    inputSchema: McpTool["inputSchema"];
+    _meta?: Record<string, unknown>;
+};
+
+type ToolReference = {
+    serverId: string;
+    originalName: string;
+    serverName: string;
+    tool: RemoteTool;
+};
+
 class CockpitStdioTransport implements Transport {
     private process: Spawn<string> | undefined;
     private buffer = "";
     private config: McpServerConfig;
-    private lastMessage: string | undefined;
 
     onclose?: () => void;
     onerror?: (error: Error) => void;
@@ -24,64 +40,44 @@ class CockpitStdioTransport implements Transport {
 
     async start(): Promise<void> {
         const command = this.config.command;
-        if (!command) throw new Error("No command specified for stdio server");
+        if (!command)
+            throw new Error("No command specified for stdio server");
 
-        return new Promise((resolve, reject) => {
-            try {
-                this.process = cockpit.spawn([command, ...(this.config.args || [])], {
-                    pty: true,
-                });
-
-                this.process?.stream((data: string) => {
-                    this.handleData(data);
-                })
-                    .fail((err: Error) => {
-                        if (this.onerror) this.onerror(err);
-                        reject(err);
-                    });
-
-                resolve();
-            } catch (e) {
-                reject(e);
-            }
+        this.process = cockpit.spawn([command, ...(this.config.args || [])], {
+            // MCP stdio is a pipe protocol. PTY echo and line processing can
+            // corrupt JSON-RPC frames and are not needed here.
+            pty: false
+        });
+        this.process.stream((data: string) => this.handleData(data));
+        this.process.fail((error: Error) => {
+            this.onerror?.(error);
         });
     }
 
     async send(message: JSONRPCMessage): Promise<void> {
-        if (!this.process) throw new Error("Process not started");
-        const json = JSON.stringify(message);
-        this.lastMessage = json;
-        this.process.input(json + "\n", true);
+        if (!this.process)
+            throw new Error("Process not started");
+        this.process.input(`${JSON.stringify(message)}\n`, true);
     }
 
     async close(): Promise<void> {
-        this.process?.close?.();
+        this.process?.close();
         this.process = undefined;
+        this.onclose?.();
     }
 
-    private handleData(data: string) {
+    private handleData(data: string): void {
         this.buffer += data;
-
-        let idx;
-        while ((idx = this.buffer.indexOf('\n')) !== -1) {
-            const line = this.buffer.substring(0, idx).trim();
-            this.buffer = this.buffer.substring(idx + 1);
-
-            // Ignore last message if it's the same as the one we sent
-            if (line === this.lastMessage) {
-                this.lastMessage = undefined;
+        let index: number;
+        while ((index = this.buffer.indexOf("\n")) !== -1) {
+            const line = this.buffer.slice(0, index).trim();
+            this.buffer = this.buffer.slice(index + 1);
+            if (!line)
                 continue;
-            }
-
-            if (line) {
-                try {
-                    const msg = JSON.parse(line);
-                    if (this.onmessage) {
-                        this.onmessage(msg);
-                    }
-                } catch (e) {
-                    console.warn("Ignored non-JSON output from stdio server:", line);
-                }
+            try {
+                this.onmessage?.(JSON.parse(line) as JSONRPCMessage);
+            } catch {
+                console.warn("Ignored non-JSON output from stdio server:", line);
             }
         }
     }
@@ -91,96 +87,166 @@ interface ConnectedClient {
     client: Client;
     transport: Transport;
     config: McpServerConfig;
+    tools?: RemoteTool[];
+    toolsPromise?: Promise<RemoteTool[]>;
 }
 
-// Manager to handle multiple clients
 export class McpClientManager {
-    private clients: Map<string, ConnectedClient> = new Map();
+    private clients = new Map<string, ConnectedClient>();
 
-    async connectServer(config: McpServerConfig, localTransport?: LocalTransport) {
+    async connectServer(config: McpServerConfig, localTransport?: LocalTransport): Promise<boolean> {
         let transport: Transport;
-
         if (localTransport) {
             transport = localTransport;
         } else if (config.transport === "stdio") {
             transport = new CockpitStdioTransport(config);
         } else if (config.transport === "http") {
-            if (!config.url) throw new Error("No URL specified for HTTP server");
+            if (!config.url)
+                throw new Error("No URL specified for HTTP server");
             transport = new StreamableHTTPClientTransport(new URL(config.url)) as Transport;
         } else if (config.transport === "local") {
             throw new Error("Local transport requires an existing transport instance");
         } else {
-            console.warn(`Unknown transport: ${(config as any).transport} `);
-            return;
+            console.warn(`Unknown transport: ${String(config.transport)}`);
+            return false;
         }
 
-        const client = new Client({
-            name: "cockpit-copilot-agent",
-            version: "0.1.0"
-        });
+        const client = new Client(
+            { name: "cockpit-copilot-agent", version: "0.1.0" },
+            {
+                listChanged: {
+                    tools: {
+                        onChanged: (error, tools) => {
+                            const connected = this.clients.get(config.id);
+                            if (!connected)
+                                return;
+                            if (error) {
+                                delete connected.tools;
+                                console.error(`Failed to refresh tools for ${config.name}:`, error);
+                            } else {
+                                connected.tools = tools as RemoteTool[];
+                            }
+                        }
+                    }
+                }
+            }
+        );
 
         try {
-            await client.connect(transport);
+            await client.connect(transport, { timeout: MCP_REQUEST_TIMEOUT_MS });
             this.clients.set(config.id, { client, transport, config });
-        } catch (e) {
-            console.error(`Failed to connect to server ${config.name}: `, e);
-            try { await transport.close() } catch { } // Ensure closed
+            return true;
+        } catch (error) {
+            console.error(`Failed to connect to server ${config.name}:`, error);
+            try {
+                await transport.close();
+            } catch {
+                // The transport may already have failed during startup.
+            }
+            return false;
         }
     }
 
-    async listAllTools(): Promise<{ serverId: string, originalName: string, tool: McpTool }[]> {
-        let allTools: { serverId: string, originalName: string, tool: McpTool }[] = [];
+    async refreshTools(signal?: AbortSignal): Promise<void> {
+        await Promise.allSettled(
+            Array.from(this.clients.values()).map(connection => this.fetchTools(connection, true, signal))
+        );
+    }
 
-        for (const [id, conn] of this.clients.entries()) {
-            try {
-                const result = await conn.client.listTools();
-                const serverName = conn.config.name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    async listAllTools(signal?: AbortSignal): Promise<{ serverId: string; originalName: string; tool: McpTool }[]> {
+        await Promise.allSettled(
+            Array.from(this.clients.values()).map(connection => this.fetchTools(connection, false, signal))
+        );
 
-                allTools = allTools.concat(result.tools.map(t => ({
-                    serverId: id,
-                    originalName: t.name,
-                    tool: {
-                        name: `${serverName}__${t.name}`,
-                        title: t.title,
-                        description: t.description,
-                        inputSchema: t.inputSchema,
-                        // @ts-ignore: extra metadata
-                        _meta: t._meta
-                    } as McpTool
-                })));
-            } catch (e) {
-                console.error(`Error listing tools for server ${id}:`, e);
+        const references: ToolReference[] = [];
+        for (const connection of this.clients.values()) {
+            const serverName = connection.config.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+            for (const tool of connection.tools || []) {
+                references.push({
+                    serverId: connection.config.id,
+                    originalName: tool.name,
+                    serverName,
+                    tool
+                });
             }
         }
-        return allTools;
-    }
 
-    async callTool(serverId: string, toolName: string, args: any): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
-        const conn = this.clients.get(serverId);
-        if (!conn) throw new Error(`Server ${serverId} not found`);
+        const counts = new Map<string, number>();
+        for (const reference of references)
+            counts.set(reference.serverName, (counts.get(reference.serverName) || 0) + 1);
 
-        const result = await conn.client.callTool({
-            name: toolName,
-            arguments: args
+        return references.map(reference => {
+            const serverPrefix = counts.get(reference.serverName)! > 1
+                ? `${reference.serverName}_${reference.serverId.slice(0, 8)}`
+                : reference.serverName;
+            const metadata = typeof reference.tool._meta?.isLowRisk === "boolean"
+                ? { isLowRisk: reference.tool._meta.isLowRisk as boolean }
+                : undefined;
+            const normalizedTool: McpTool = {
+                name: `${serverPrefix}__${reference.tool.name}`,
+                inputSchema: reference.tool.inputSchema
+            };
+            if (reference.tool.title !== undefined)
+                normalizedTool.title = reference.tool.title;
+            if (reference.tool.description !== undefined)
+                normalizedTool.description = reference.tool.description;
+            if (metadata)
+                normalizedTool._meta = metadata;
+            return {
+                serverId: reference.serverId,
+                originalName: reference.originalName,
+                tool: normalizedTool
+            };
         });
-
-        if (result.content && Array.isArray(result.content)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return result.content.map((c: any) => {
-                if (c.type === 'text') return c.text;
-                if (c.type === 'image') return `[Image: ${c.mimeType}]`;
-                return JSON.stringify(c);
-            }).join("\n");
-        }
-
-        return JSON.stringify(result);
     }
 
-    async close() {
-        for (const conn of this.clients.values()) {
-            await conn.client.close();
-            await conn.transport.close();
-        }
+    async callTool(serverId: string, toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+        const connection = this.clients.get(serverId);
+        if (!connection)
+            throw new Error(`Server ${serverId} not found`);
+
+        const requestOptions = signal
+            ? { timeout: MCP_REQUEST_TIMEOUT_MS, signal }
+            : { timeout: MCP_REQUEST_TIMEOUT_MS };
+        const result = await connection.client.callTool({ name: toolName, arguments: args }, undefined, requestOptions);
+        const content = (result.content || []) as Array<{ type?: string; text?: string; mimeType?: string }>;
+        const output = content.map(item => {
+            if (item.type === "text")
+                return item.text || "";
+            if (item.type === "image")
+                return `[Image: ${item.mimeType || "unknown"}]`;
+            return JSON.stringify(item);
+        }).join("\n");
+        return output.length > MAX_TOOL_OUTPUT_LENGTH
+            ? `${output.slice(0, MAX_TOOL_OUTPUT_LENGTH)}\n[tool output truncated]`
+            : output;
+    }
+
+    async close(): Promise<void> {
+        await Promise.allSettled(Array.from(this.clients.values()).map(async connection => {
+            await connection.client.close();
+            await connection.transport.close();
+        }));
         this.clients.clear();
+    }
+
+    private async fetchTools(connection: ConnectedClient, force: boolean, signal?: AbortSignal): Promise<RemoteTool[]> {
+        if (!force && connection.tools)
+            return connection.tools;
+        if (!force && connection.toolsPromise)
+            return connection.toolsPromise;
+
+        const requestOptions = signal
+            ? { timeout: MCP_REQUEST_TIMEOUT_MS, signal }
+            : { timeout: MCP_REQUEST_TIMEOUT_MS };
+        const request = connection.client.listTools({}, requestOptions).then(result => {
+            connection.tools = result.tools as RemoteTool[];
+            return connection.tools;
+        })
+                .finally(() => {
+                    delete connection.toolsPromise;
+                });
+        connection.toolsPromise = request;
+        return request;
     }
 }

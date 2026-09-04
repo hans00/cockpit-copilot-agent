@@ -1,6 +1,20 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
 
+const errorDetails = (error: unknown): { message: string; output?: string } => {
+    if (error && typeof error === "object") {
+        const details = error as Record<string, unknown>;
+        const output = [details.stdout, details.stderr].filter(value => typeof value === "string").join("");
+        const result: { message: string; output?: string } = {
+            message: typeof details.message === "string" ? details.message : String(error)
+        };
+        if (output)
+            result.output = output;
+        return result;
+    }
+    return { message: String(error) };
+};
+
 export interface UnitInfo {
     unit: string;
     status: string;
@@ -15,7 +29,7 @@ export async function listUnits(scope: "system" | "user" = "system"): Promise<Un
         }
         const result = await cockpit.spawn(args);
         const units: UnitInfo[] = [];
-        
+
         for (const line of result.split("\n")) {
             const parts = line.trim().split(/\s+/);
             if (parts.length >= 1 && parts[0]) {
@@ -26,7 +40,7 @@ export async function listUnits(scope: "system" | "user" = "system"): Promise<Un
             }
         }
         return units;
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error("Error listing units:", e);
         return [];
     }
@@ -40,12 +54,10 @@ export async function getStatus(unit: string, scope: "system" | "user" = "system
         }
         const result = await cockpit.spawn(args);
         return result;
-    } catch (e: any) {
+    } catch (e: unknown) {
         // systemctl status returns non-zero for stopped services, but we still want the output
-        if (e.stdout || e.stderr) {
-            return e.stdout + e.stderr;
-        }
-        return `Error getting status: ${e.message || e}`;
+        const details = errorDetails(e);
+        return details.output || `Error getting status: ${details.message}`;
     }
 }
 
@@ -57,17 +69,14 @@ export async function manageService(unit: string, action: string, scope: "system
 
     try {
         const args = ["systemctl", action, unit];
-        const options: any = {};
-        
         if (scope === "user") {
             args.splice(1, 0, "--user");
-        } else {
-            options.superuser = "require";
         }
 
+        const options = scope === "user" ? {} : { superuser: "require" as const };
         await cockpit.spawn(args, options);
         return `Successfully executed ${action} on ${unit}`;
-    } catch (e: any) {
-        return `Error: ${e.message || e.stderr || e}`;
+    } catch (e: unknown) {
+        return `Error: ${errorDetails(e).message}`;
     }
 }

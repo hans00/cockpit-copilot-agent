@@ -98,7 +98,8 @@ export class ContainerPlugin extends ToolPlugin {
                 description: "Start a container",
                 inputSchema: z.object({
                     name: z.string().describe("Container name"),
-                    daemon: z.boolean().optional().describe("If true, setup as a user systemd service")
+                    daemon: z.boolean().optional()
+                            .describe("If true, setup as a user systemd service")
                 })
             },
             async ({ name, daemon }) => {
@@ -176,30 +177,43 @@ export class ContainerPlugin extends ToolPlugin {
                 description: "Run a new container",
                 inputSchema: z.object({
                     image: z.string().describe("Image name (e.g. alpine:latest)"),
-                    name: z.string().optional().describe("Container name (highly recommended)"),
+                    name: z.string().optional()
+                            .describe("Container name (highly recommended)"),
                     ports: z.array(z.object({
                         host: z.string().describe("Host port"),
                         container: z.string().describe("Container port")
-                    })).optional().describe("Port mappings (e.g. 8080:80)"),
+                    })).optional()
+                            .describe("Port mappings (e.g. 8080:80)"),
                     vols: z.array(z.object({
                         host: z.string().describe("Host path"),
                         container: z.string().describe("Container path"),
-                        flags: z.string().optional().describe("Volume flags (e.g. ro)"),
-                    })).optional().describe("Volume mappings (e.g. /host:/container)"),
-                    env: z.array(z.string()).optional().describe("Environment variables (e.g. KEY=VAL)"),
-                    detach: z.boolean().default(true).describe("Run in background (default true)"),
-                    network: z.string().optional().describe("Network mode (e.g. bridge, host)"),
-                    restart: z.string().optional().describe("Restart policy (e.g. always, on-failure)"),
-                    memory: z.string().optional().describe("Memory limit (e.g. 512m)"),
-                    cpu: z.string().optional().describe("CPU limit (e.g. 1.0)"),
-                    daemon: z.boolean().optional().describe("If true, automatically setup as a user systemd service"),
-                    gid: z.string().optional().describe("Container group id (e.g. 1000)"),
-                    uid: z.string().optional().describe("Container user id (e.g. 1000)"),
+                        flags: z.string().optional()
+                                .describe("Volume flags (e.g. ro)"),
+                    })).optional()
+                            .describe("Volume mappings (e.g. /host:/container)"),
+                    env: z.array(z.string()).optional()
+                            .describe("Environment variables (e.g. KEY=VAL)"),
+                    detach: z.boolean().default(true)
+                            .describe("Run in background (default true)"),
+                    network: z.string().optional()
+                            .describe("Network mode (e.g. bridge, host)"),
+                    restart: z.string().optional()
+                            .describe("Restart policy (e.g. always, on-failure)"),
+                    memory: z.string().optional()
+                            .describe("Memory limit (e.g. 512m)"),
+                    cpu: z.string().optional()
+                            .describe("CPU limit (e.g. 1.0)"),
+                    daemon: z.boolean().optional()
+                            .describe("If true, automatically setup as a user systemd service"),
+                    gid: z.string().optional()
+                            .describe("Container group id (e.g. 1000)"),
+                    uid: z.string().optional()
+                            .describe("Container user id (e.g. 1000)"),
                 })
             },
             async (args) => {
                 if (!this.runtime) throw new Error("Container runtime not detected");
-                
+
                 const cmd = [this.runtime, "run"];
                 if (args.detach !== false) cmd.push("-d");
                 if (args.name) cmd.push("--name", args.name);
@@ -213,7 +227,7 @@ export class ContainerPlugin extends ToolPlugin {
                 (args.vols || []).forEach((v) => cmd.push("-v", `${v.host}:${v.container}${v.flags ? `:${v.flags}` : ""}`));
                 (args.env || []).forEach((e) => cmd.push("-e", e));
                 cmd.push(args.image);
-                
+
                 const res = await this.runRuntime(cmd);
                 if (args.daemon && args.name && this.runtime === "podman") {
                     const systemdRes = await this.setupSystemd(args.name);
@@ -265,8 +279,8 @@ export class ContainerPlugin extends ToolPlugin {
 
                 return `Successfully installed and enabled systemd service: container-${containerName}.service`;
             }
-        } catch (e: any) {
-            return `Failed to setup systemd service: ${e.message || e.stderr || e}`;
+        } catch (e: unknown) {
+            return `Failed to setup systemd service: ${e instanceof Error ? e.message : String(e)}`;
         }
     }
 
@@ -276,8 +290,8 @@ export class ContainerPlugin extends ToolPlugin {
                 return await cockpit.spawn(cmd, { superuser: "try" });
             }
             return await cockpit.spawn(cmd);
-        } catch (e: any) {
-            return `Error running ${cmd[0]}: ${e.message || e.stderr || e}`;
+        } catch (e: unknown) {
+            return `Error running ${cmd[0]}: ${e instanceof Error ? e.message : String(e)}`;
         }
     }
 }

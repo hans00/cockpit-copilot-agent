@@ -1,4 +1,4 @@
-import { Tool } from "@modelcontextprotocol/sdk/types.js";
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export abstract class ToolPlugin {

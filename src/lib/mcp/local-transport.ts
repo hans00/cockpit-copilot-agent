@@ -7,6 +7,7 @@ import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
  * This is useful for running an MCP server directly in the same process/browser window as the client.
  */
 export class LocalTransport implements Transport {
+    // eslint-disable-next-line no-use-before-define
     private other?: LocalTransport | undefined;
 
     onclose?: () => void;

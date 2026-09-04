@@ -9,8 +9,8 @@ export async function readFile(path: string): Promise<string> {
         const content = await handle.read();
         handle.close();
         return content;
-    } catch (e: any) {
-        return `Error reading file: ${e.message || e}`;
+    } catch (e: unknown) {
+        return `Error reading file: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 
@@ -20,8 +20,8 @@ export async function writeFile(path: string, content: string): Promise<string> 
         await handle.replace(content);
         handle.close();
         return `Successfully wrote to ${path}`;
-    } catch (e: any) {
-        return `Error writing file: ${e.message || e}`;
+    } catch (e: unknown) {
+        return `Error writing file: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 

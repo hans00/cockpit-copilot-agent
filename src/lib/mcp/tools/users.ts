@@ -19,7 +19,7 @@ export async function addUser(username: string): Promise<string> {
     try {
         await cockpit.spawn(["useradd", "-m", username], { superuser: "require" });
         return `User ${username} added successfully.`;
-    } catch (e: any) {
-        return `Error adding user: ${e.message || e.stderr || e}`;
+    } catch (e: unknown) {
+        return `Error adding user: ${e instanceof Error ? e.message : String(e)}`;
     }
 }

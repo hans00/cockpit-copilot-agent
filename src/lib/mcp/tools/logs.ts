@@ -9,7 +9,7 @@ export async function queryJournal(service?: string, lines: number = 50): Promis
 
     try {
         return await cockpit.spawn(cmd);
-    } catch (e: any) {
-        return `Error querying journal: ${e.message || e}`;
+    } catch (e: unknown) {
+        return `Error querying journal: ${e instanceof Error ? e.message : String(e)}`;
     }
 }

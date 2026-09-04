@@ -48,7 +48,8 @@ export class SmartPlugin extends ToolPlugin {
                 description: "Run SMART test on a disk",
                 inputSchema: z.object({
                     device: z.string().describe("Device path (e.g. /dev/sda)"),
-                    test: z.enum(["short", "long"]).default("short").describe("Test type")
+                    test: z.enum(["short", "long"]).default("short")
+                            .describe("Test type")
                 })
             },
             async ({ device, test }) => {
@@ -81,8 +82,8 @@ export class SmartPlugin extends ToolPlugin {
     private async run(cmd: string[]): Promise<string> {
         try {
             return await cockpit.spawn(cmd, { superuser: 'require' });
-        } catch (e: any) {
-            return `Error running ${cmd[0]}: ${e.message || e.stderr || e}`;
+        } catch (e: unknown) {
+            return `Error running ${cmd[0]}: ${e instanceof Error ? e.message : String(e)}`;
         }
     }
 }

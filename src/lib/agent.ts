@@ -1,294 +1,275 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
-import { ChatMessage, CopilotSettings, ToolCall, McpTool, ChatSession, ChatSessionSummary } from "./types.js";
+import { ChatMessage, CopilotSettings, ToolCall, McpTool, ChatSessionSummary } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { McpClientManager } from "./mcp-client.js";
 import { McpServerLocal } from "./mcp/mcp-server-local.js";
 import { LocalTransport } from "./mcp/local-transport.js";
+import { HistoryStore } from "./history-store.js";
+import { ensureCockpitReady } from "./cockpit-ready.js";
 
 type UpdateCallback = (messages: ChatMessage[]) => void;
 
-// abc_def__ghi -> Abc Def: Ghi
-const formatToolName = (name: string) =>
-    name.replace(/__/g, ": ").replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+const MAX_CONTEXT_MESSAGES = 80;
+const MAX_TOOL_ITERATIONS = 8;
+const STREAM_UPDATE_INTERVAL_MS = 33;
 
-function safeJsonParse(str: string) {
+const formatToolName = (name: string): string =>
+    name
+            .replace(/__/g, ": ")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, letter => letter.toUpperCase());
+
+const safeJsonParse = (value: string): Record<string, unknown> => {
     try {
-        return JSON.parse(str);
+        const parsed: unknown = JSON.parse(value);
+        return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+            ? parsed as Record<string, unknown>
+            : {};
     } catch {
-        return { error: "Invalid JSON arguments" };
+        return {};
     }
-}
+};
 
-type ChatID = string;
+const isAbortError = (error: unknown): boolean =>
+    (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") ||
+    (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError");
 
 export class Agent {
     private settings: CopilotSettings;
     private llm: LlmClient;
     private mcpManager: McpClientManager;
+    private historyStore: HistoryStore;
     private messages: ChatMessage[] = [];
+    private loadedMessageCount = 0;
     private onUpdate: UpdateCallback;
-    private systemContext: string = "";
-    public isProcessing: boolean = false;
-    private toolMetadata: Map<string, McpTool> = new Map();
-
+    private systemContext = "";
+    private loopPromise: Promise<void> | null = null;
+    private requestAbortController: AbortController | null = null;
     private history: Record<string, ChatSessionSummary> = {};
-    public currentChatId: string | null = null;
+    private toolMetadata = new Map<string, McpTool>();
 
+    public isProcessing = false;
+    public currentChatId: string | null = null;
     public pendingApprovals: {
-        toolCall: ToolCall,
-        resolve: (value: boolean) => void,
-        reject: (reason?: unknown) => void
+        toolCall: ToolCall;
+        resolve: (value: boolean) => void;
     }[] = [];
 
     constructor(settings: CopilotSettings, mcpManager: McpClientManager, onUpdate: UpdateCallback) {
         this.settings = settings;
         this.mcpManager = mcpManager;
+        this.historyStore = new HistoryStore();
         this.onUpdate = onUpdate;
+        this.llm = this.createLlm(settings);
+    }
 
-        this.llm = new LlmClient({
-            apiKey: settings.llm.apiKey, // This needs to be loaded from credentials separately or passed in
+    private createLlm(settings: CopilotSettings): LlmClient {
+        return new LlmClient({
+            apiKey: settings.llm.apiKey,
             baseUrl: settings.llm.baseUrl,
-            model: settings.llm.model
+            model: settings.llm.model,
+            useHostProxy: settings.llm.provider === "custom"
         });
     }
 
-    // Initialize: load system context, connect MCP servers
-    async init() {
-        await cockpit.init();
-        await this.ensureHistoryDir();
-        await this.migrateHistory();
-        await this.loadHistoryIndex();
+    async init(): Promise<void> {
+        await ensureCockpitReady();
+        this.history = await this.historyStore.initialize();
 
         if (Object.keys(this.history).length === 0) {
             await this.createChat();
         } else {
-            // Switch to most recent
-            const recent = Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified)[0];
-            await this.switchToChat(recent.id);
+            const recent = this.getHistory()[0];
+            if (recent)
+                await this.switchToChat(recent.id);
         }
+
         await this.setupConnection();
+
+        // Legacy history can be large. It is deliberately migrated after the
+        // local agent is usable, rather than blocking first paint and MCP setup.
+        setTimeout(() => {
+            this.migrateLegacyHistory().catch(error => console.error("Legacy history migration failed:", error));
+        }, 0);
     }
 
-    public getHistory() {
+    public getHistory(): ChatSessionSummary[] {
         return Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified);
     }
 
-    private get historyDir() {
-        return `${cockpit.info.user.home}/.local/share/cockpit/copilot-chats`;
-    }
+    private async migrateLegacyHistory(): Promise<void> {
+        const sessions = await this.historyStore.migrateLegacy();
+        if (sessions.length === 0)
+            return;
 
-    private async ensureHistoryDir() {
-        try {
-            await cockpit.spawn(["mkdir", "-p", this.historyDir]);
-        } catch (e) {
-            console.error("Failed to create history dir", e);
+        for (const session of sessions) {
+            this.history[session.id] = {
+                id: session.id,
+                title: session.title,
+                lastModified: session.lastModified,
+                messageCount: session.messages.length
+            };
         }
-    }
 
-    private async migrateHistory() {
-        const oldHistoryPath = `${cockpit.info.user.home}/.local/share/cockpit/copilot-history.json`;
-        try {
-            const file = cockpit.file(oldHistoryPath);
-            const content = await file.read();
-            if (content) {
-                const oldHistory: Record<string, ChatSession> = JSON.parse(content);
-                // Migrate each chat
-                for (const [id, session] of Object.entries(oldHistory)) {
-                    await this.saveChat(session);
-                    this.history[id] = {
-                         id: session.id,
-                         title: session.title,
-                         lastModified: session.lastModified
-                    };
-                }
-                await this.saveHistoryIndex();
-                // Rename old file to avoid re-migration
-                await cockpit.spawn(["mv", oldHistoryPath, `${oldHistoryPath}.bak`]);
-            }
-        } catch (e) {
-            // No old history or invalid
-        }
-    }
-
-    private async loadHistoryIndex() {
-        try {
-            const indexPath = `${this.historyDir}/index.json`;
-            const file = cockpit.file(indexPath);
-            const content = await file.read();
-            if (content) {
-                this.history = JSON.parse(content);
-            }
-        } catch {
-            this.history = {};
-        }
-    }
-
-    private async saveHistoryIndex() {
-        const indexPath = `${this.historyDir}/index.json`;
-        const file = cockpit.file(indexPath);
-        await file.replace(JSON.stringify(this.history));
-    }
-
-    private async loadChat(id: string): Promise<ChatSession | null> {
-        try {
-            const chatPath = `${this.historyDir}/${id}.json`;
-            const file = cockpit.file(chatPath);
-            const content = await file.read();
-            if (content) {
-                return JSON.parse(content);
-            }
-        } catch {
-            return null;
-        }
-        return null;
-    }
-
-    private async saveChat(session: ChatSession) {
-        const chatPath = `${this.historyDir}/${session.id}.json`;
-        const file = cockpit.file(chatPath);
-        await file.replace(JSON.stringify(session));
-    }
-
-    public async createChat() {
-        const id = crypto.randomUUID();
-        const session: ChatSession = {
-            id,
-            title: "New Chat",
-            messages: [],
-            lastModified: Date.now()
-        };
-        
-        await this.saveChat(session);
-        
-        this.history[id] = {
-            id,
-            title: session.title,
-            lastModified: session.lastModified
-        };
-        
-        await this.saveHistoryIndex();
-        await this.switchToChat(id);
-        return id;
-    }
-
-    public async switchToChat(id: string) {
-        if (this.history[id]) {
-            this.currentChatId = id;
-            const session = await this.loadChat(id);
-            if (session) {
-                this.messages = session.messages;
-            } else {
-                this.messages = [];
-            }
+        const recent = this.getHistory()[0];
+        const current = this.currentChatId ? this.history[this.currentChatId] : undefined;
+        if (recent && current && current.title === "New Chat" && this.messages.length === 0) {
+            await this.switchToChat(recent.id);
+        } else {
             this.onUpdate(this.messages);
         }
     }
 
-    public async deleteChat(id: string) {
+    private async createChat(): Promise<string> {
+        const id = crypto.randomUUID();
+        const now = Date.now();
+        const session = {
+            id,
+            title: "New Chat",
+            messages: [],
+            lastModified: now,
+            loadedMessageCount: 0
+        };
+
+        await this.historyStore.saveChat(session);
+        await this.historyStore.flush();
+        this.history[id] = { id, title: session.title, lastModified: now, messageCount: 0 };
+        this.currentChatId = id;
+        this.messages = [];
+        this.loadedMessageCount = 0;
+        this.onUpdate(this.messages);
+        return id;
+    }
+
+    public async createNewChat(): Promise<string> {
+        if (this.loopPromise)
+            throw new Error("Cannot create a chat while a response is processing");
+        return this.createChat();
+    }
+
+    public async switchToChat(id: string): Promise<void> {
+        if (this.loopPromise)
+            throw new Error("Cannot switch chats while a response is processing");
+        if (!this.history[id])
+            return;
+
+        const session = await this.historyStore.loadChat(id);
+        this.currentChatId = id;
+        this.messages = session?.messages || [];
+        this.loadedMessageCount = session?.loadedMessageCount ?? this.messages.length;
+        this.onUpdate(this.messages);
+    }
+
+    public async deleteChat(id: string): Promise<void> {
+        if (this.loopPromise)
+            throw new Error("Cannot delete a chat while a response is processing");
+
+        await this.historyStore.deleteChat(id);
         delete this.history[id];
+
         if (this.currentChatId === id) {
             this.currentChatId = null;
             this.messages = [];
-            this.onUpdate([]);
-            
-            // Try to switch to another chat
-            const remaining = Object.values(this.history).sort((a, b) => b.lastModified - a.lastModified);
-            if (remaining.length > 0) {
-                 await this.switchToChat(remaining[0].id);
-            } else {
-                 await this.createChat();
-            }
+            this.loadedMessageCount = 0;
+            const remaining = this.getHistory()[0];
+            if (remaining)
+                await this.switchToChat(remaining.id);
+            else
+                await this.createChat();
         }
-        await this.saveHistoryIndex();
-        
-        try {
-             const chatPath = `${this.historyDir}/${id}.json`;
-             await cockpit.spawn(["rm", "-f", chatPath]);
-        } catch (e) {
-            console.error("Failed to delete chat file", e);
-        }
+        await this.historyStore.flush();
+        this.onUpdate(this.messages);
     }
 
-    private async saveCurrentChat() {
-        if (this.currentChatId && this.history[this.currentChatId]) {
-            const session: ChatSession = {
-                id: this.currentChatId,
-                title: this.history[this.currentChatId].title,
-                messages: this.messages,
-                lastModified: Date.now()
-            };
+    private async saveCurrentChat(): Promise<void> {
+        if (!this.currentChatId || !this.history[this.currentChatId])
+            return;
 
-            // Auto-title if it's "New Chat" and we have messages
-            if (session.title === "New Chat" && this.messages.length > 0) {
-                 const firstMsg = this.messages.find(m => m.role === 'user');
-                 if (firstMsg) {
-                     // Start generation in background
-                     this.generateTitle(this.messages).then(title => {
-                         if (title && this.history[this.currentChatId!] && this.history[this.currentChatId!].title === "New Chat") {
-                             this.history[this.currentChatId!].title = title;
-                             this.saveCurrentChat();
-                         }
-                     });
-                     // Temporary fallback while generating
-                     session.title = firstMsg.content.slice(0, 30) + (firstMsg.content.length > 30 ? "..." : "");
-                 }
-            }
-
-            // Update in-memory index
-            this.history[this.currentChatId].title = session.title;
-            this.history[this.currentChatId].lastModified = session.lastModified;
-
-            await this.saveChat(session);
-            await this.saveHistoryIndex();
+        const current = this.history[this.currentChatId];
+        let title = current.title;
+        if (title === "New Chat") {
+            const firstUserMessage = this.messages.find(message => message.role === "user");
+            if (firstUserMessage)
+                title = firstUserMessage.content.slice(0, 30) + (firstUserMessage.content.length > 30 ? "..." : "");
         }
+
+        const appendedMessages = this.messages.length >= this.loadedMessageCount;
+        const messageCount = appendedMessages
+            ? (current.messageCount ?? this.loadedMessageCount) + this.messages.length - this.loadedMessageCount
+            : this.messages.length;
+        const session = {
+            id: this.currentChatId,
+            title,
+            messages: this.messages,
+            lastModified: Date.now(),
+            messageCount,
+            loadedMessageCount: this.loadedMessageCount
+        };
+        await this.historyStore.saveChat(session);
+        this.loadedMessageCount = this.messages.length;
+        this.history[this.currentChatId] = {
+            id: session.id,
+            title: session.title,
+            lastModified: session.lastModified,
+            messageCount
+        };
     }
 
-    public async reconfigure(newSettings: CopilotSettings) {
+    public async reconfigure(newSettings: CopilotSettings): Promise<void> {
+        this.cancel();
+        if (this.loopPromise)
+            await this.loopPromise;
+
         this.settings = newSettings;
-
-        // Re-init LLM with new settings
-        this.llm = new LlmClient({
-            apiKey: newSettings.llm.apiKey,
-            baseUrl: newSettings.llm.baseUrl,
-            model: newSettings.llm.model
-        });
-
-        // Close existing connections
+        this.llm = this.createLlm(newSettings);
         await this.mcpManager.close();
-
-        // Re-connect
         await this.setupConnection();
+    }
+
+    public cancel(): void {
+        this.requestAbortController?.abort();
+        for (const approval of this.pendingApprovals)
+            approval.resolve(false);
+        this.pendingApprovals = [];
+    }
+
+    public async close(): Promise<void> {
+        this.cancel();
+        if (this.loopPromise)
+            await this.loopPromise;
+        await this.historyStore.flush();
+        await this.mcpManager.close();
     }
 
     private async getSystemContext(): Promise<string> {
         try {
-            const hostname = await cockpit.spawn(["hostname"]).then(data => data.trim());
-            const osRelease = await cockpit.file("/etc/os-release").read();
-    
-            let prettyName = "Linux";
-            if (osRelease) {
-                const match = osRelease.match(/PRETTY_NAME="([^"]+)"/);
-                if (match) prettyName = match[1];
-            }
-    
-            const uptime = await cockpit.spawn(["uptime", "-p"]).then(data => data.trim());
+            const hostnamePromise = cockpit.spawn(["hostname"]).then(data => data.trim());
+            const osReleaseFile = cockpit.file("/etc/os-release");
+            const osReleasePromise = osReleaseFile.read().finally(() => osReleaseFile.close());
+            const uptimePromise = cockpit.spawn(["uptime", "-p"]).then(data => data.trim());
+            const [hostname, osRelease, uptime] = await Promise.all([
+                hostnamePromise,
+                osReleasePromise,
+                uptimePromise
+            ]);
+
+            const match = osRelease?.match(/PRETTY_NAME="([^"]+)"/);
+            const prettyName = match?.[1] || "Linux";
             const userInfo = cockpit.info.user;
-    
             return `Hostname: ${hostname}
-    OS: ${prettyName}
-    Uptime: ${uptime}
-    Current Date: ${new Date().toLocaleString('en-US')}
-    Current User: ${userInfo.name} (id: ${userInfo.uid}; groups: ${userInfo.groups.join(", ")}; home: ${userInfo.home})
-    Running in Cockpit Web Console.
-    `;
-        } catch (e) {
-            console.error("Error gathering system context:", e);
+OS: ${prettyName}
+Uptime: ${uptime}
+Current Date: ${new Date().toLocaleString()}
+Current User: ${userInfo.name} (id: ${userInfo.uid}; groups: ${userInfo.groups.join(", ")}; home: ${userInfo.home})
+Running in Cockpit Web Console.`;
+        } catch (error) {
+            console.error("Error gathering system context:", error);
             return "System context unavailable.";
         }
     }
 
-    private async setupConnection() {
-        // Initialize local server
+    private async setupConnection(): Promise<void> {
         const localServer = new McpServerLocal({
             allow_shell_access: this.settings.allowShellAccess
         });
@@ -297,29 +278,23 @@ export class Agent {
         const clientTransport = new LocalTransport();
         const serverTransport = new LocalTransport();
         clientTransport.connect(serverTransport);
-
-        // Start server with its transport
-        // We need to wait for it or just start it. localServer.connect(serverTransport) is async
         await localServer.connect(serverTransport);
-
-        // Connect to built-in local server
         await this.mcpManager.connectServer({
             id: "builtin",
             name: "System Tools",
             transport: "local",
             enabled: true
         }, clientTransport);
+        await this.mcpManager.refreshTools();
 
-        // Connect custom servers from settings
-        for (const s of this.settings.mcpServers) {
-            if (s.enabled) {
-                await this.mcpManager.connectServer(s);
-            }
-        }
-
-        const sysInfo = await this.getSystemContext();
-        this.systemContext = `
-You are a Linux System Administrator Copilot running in Cockpit.
+        const sysInfoPromise = this.getSystemContext();
+        const customConnections = Promise.allSettled(
+            this.settings.mcpServers
+                    .filter(server => server.enabled)
+                    .map(server => this.mcpManager.connectServer(server))
+        ).then(() => this.mcpManager.refreshTools());
+        const sysInfo = await sysInfoPromise;
+        this.systemContext = `You are a Linux System Administrator Copilot running in Cockpit.
 Your goal is to help the user manage this system safely and efficiently.
 
 SYSTEM CONTEXT:
@@ -330,218 +305,206 @@ ${this.settings.customSystemPrompt}
 
 RULES:
 1. You may use the provided tools to inspect and modify the system.
-2. ALWAYS ask for confirmation before taking destructive actions (though the system will enforce approval).
+2. ALWAYS ask for confirmation before taking destructive actions.
 3. Be concise. Use markdown for formatting.
-4. If a tool call fails, analyze the error and suggest a fix.
-`;
+4. If a tool call fails, analyze the error and suggest a fix.`;
+
+        // Custom servers are optional and must not block first usable UI.
+        customConnections.catch(error => console.error("MCP background setup failed:", error));
     }
 
+    public async addUserMessage(content: string): Promise<void> {
+        if (this.loopPromise)
+            return;
 
-    async addUserMessage(content: string) {
-        const msg: ChatMessage = {
+        const message: ChatMessage = {
             id: crypto.randomUUID(),
             role: "user",
             content
         };
-        this.messages = [...this.messages, msg];
+        this.messages = [...this.messages, message];
         this.onUpdate(this.messages);
-        await this.saveCurrentChat();
-
-        await this.runLoop();
+        await this.startLoop();
     }
 
-    public async regenerateLastResponse() {
-        if (this.isProcessing) return;
+    public async regenerateLastResponse(): Promise<void> {
+        if (this.loopPromise)
+            return;
 
-        const lastMsg = this.messages[this.messages.length - 1];
-        if (lastMsg && lastMsg.role === "assistant") {
-            // Remove last assistant message
-            this.messages = this.messages.slice(0, -1);
-            
-            // Clear any pending approvals since we are backtracking
-            this.pendingApprovals = [];
-            
-            this.onUpdate(this.messages);
-            await this.runLoop();
-        }
-    }
-
-    // Resume loop after approval
-    public approveToolCall(toolCallId: string) {
-        const index = this.pendingApprovals.findIndex(p => p.toolCall.id === toolCallId);
-        if (index !== -1) {
-            const approval = this.pendingApprovals[index];
-            this.pendingApprovals.splice(index, 1);
-            approval.resolve(true);
-            this.onUpdate(this.messages);
-        }
-    }
-
-    public rejectToolCall(toolCallId: string) {
-        const index = this.pendingApprovals.findIndex(p => p.toolCall.id === toolCallId);
-        if (index !== -1) {
-            const approval = this.pendingApprovals[index];
-            this.pendingApprovals.splice(index, 1);
-            approval.resolve(false);
-            this.onUpdate(this.messages);
-        }
-    }
-
-    private async runLoop() {
-        // Prepare context
-        const contextMessages: ChatMessage[] = [
-            { id: "sys", role: "system", content: this.systemContext },
-            ...this.messages
-        ];
-
-        const tools = await this.mcpManager.listAllTools();
-        const llmTools = tools.map((t) => t.tool);
-
-        // Cache tool metadata for UI names
-        for (const t of tools) {
-            this.toolMetadata.set(t.tool.name, t.tool);
-        }
-
-        // Reset processing state before starting LLM to ensure transition
-        this.isProcessing = false;
+        const lastMessage = this.messages[this.messages.length - 1];
+        if (lastMessage?.role !== "assistant")
+            return;
+        this.messages = this.messages.slice(0, -1);
+        this.pendingApprovals = [];
         this.onUpdate(this.messages);
+        await this.startLoop();
+    }
 
+    private async startLoop(): Promise<void> {
+        if (this.loopPromise)
+            return this.loopPromise;
+        const loop = this.runLoop();
+        this.loopPromise = loop;
+        try {
+            await loop;
+        } finally {
+            if (this.loopPromise === loop)
+                this.loopPromise = null;
+        }
+    }
+
+    public approveToolCall(toolCallId: string): void {
+        const index = this.pendingApprovals.findIndex(approval => approval.toolCall.id === toolCallId);
+        if (index === -1)
+            return;
+        const [approval] = this.pendingApprovals.splice(index, 1);
+        approval.resolve(true);
+        this.onUpdate(this.messages);
+    }
+
+    public rejectToolCall(toolCallId: string): void {
+        const index = this.pendingApprovals.findIndex(approval => approval.toolCall.id === toolCallId);
+        if (index === -1)
+            return;
+        const [approval] = this.pendingApprovals.splice(index, 1);
+        approval.resolve(false);
+        this.onUpdate(this.messages);
+    }
+
+    private buildContext(): ChatMessage[] {
+        const recent = this.messages.length > MAX_CONTEXT_MESSAGES
+            ? [
+                {
+                    id: "context-truncated",
+                    role: "system" as const,
+                    content: "Earlier messages were omitted to stay within the context budget."
+                },
+                ...this.messages.slice(-MAX_CONTEXT_MESSAGES)
+            ]
+            : this.messages;
+        return [{ id: "sys", role: "system", content: this.systemContext }, ...recent];
+    }
+
+    private async runLoop(): Promise<void> {
+        const controller = new AbortController();
+        this.requestAbortController = controller;
         this.isProcessing = true;
         this.onUpdate(this.messages);
 
         try {
-            // Placeholder for streaming response
-            let partialContent = "";
-            const streamingMessage: ChatMessage = {
-                id: "streaming",
-                role: "assistant",
-                content: ""
-            };
+            for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+                const tools = await this.mcpManager.listAllTools(controller.signal);
+                this.toolMetadata = new Map(tools.map(reference => [reference.tool.name, reference.tool]));
+                const toolMap = new Map(tools.map(reference => [reference.tool.name, reference]));
+                let partialContent = "";
+                let updateTimer: ReturnType<typeof setTimeout> | undefined;
+                const streamingMessage: ChatMessage = {
+                    id: "streaming",
+                    role: "assistant",
+                    content: ""
+                };
+                const publishStreaming = () => {
+                    updateTimer = undefined;
+                    this.onUpdate([...this.messages, streamingMessage]);
+                };
 
-            // Call LLM
-            const response = await this.llm.chatCompletion(contextMessages, llmTools, (chunk) => {
-                partialContent += chunk;
-                streamingMessage.content = partialContent;
-                this.onUpdate([...this.messages, streamingMessage]);
-            });
+                const response = await this.llm.chatCompletion(
+                    this.buildContext(),
+                    tools.map(reference => reference.tool),
+                    chunk => {
+                        partialContent += chunk;
+                        streamingMessage.content = partialContent;
+                        if (!updateTimer)
+                            updateTimer = setTimeout(publishStreaming, STREAM_UPDATE_INTERVAL_MS);
+                    },
+                    controller.signal
+                );
+                if (updateTimer)
+                    clearTimeout(updateTimer);
+                this.messages = [...this.messages, response];
+                this.onUpdate(this.messages);
 
-            this.isProcessing = false;
-            this.onUpdate(this.messages);
+                if (!response.toolCalls?.length)
+                    break;
 
-            // Add Assistant response
-            this.messages = [...this.messages, response];
-            this.onUpdate(this.messages);
-
-            // Handle Tool Calls
-            if (response.toolCalls && response.toolCalls.length > 0) {
-                // Prepare all tool calls for approval
-                const toolPromises = response.toolCalls.map(async (call) => {
-                    const toolName = call.function.name;
-                    const toolArgs = safeJsonParse(call.function.arguments);
-
-                    const toolDef = tools.find((t: any) => t.tool.name === toolName);
-                    const isLowRisk = toolDef?.tool._meta?.isLowRisk ?? false;
-
-                    let approved = false;
-
-                    // Only auto-approve if explicitly marked as low risk
-                    if (isLowRisk) {
-                         approved = true;
+                const resultMessages: ChatMessage[] = [];
+                for (const call of response.toolCalls) {
+                    const reference = toolMap.get(call.function.name);
+                    const approved = reference?.tool._meta?.isLowRisk
+                        ? true
+                        : await this.waitForApproval(call);
+                    let output: string;
+                    if (!approved) {
+                        output = "User rejected tool execution.";
+                    } else if (!reference) {
+                        output = `Error: Tool '${call.function.name}' not found.`;
                     } else {
-                        // Ask for approval (pauses this specific tool execution)
-                        approved = await new Promise<boolean>((resolve, reject) => {
-                            this.pendingApprovals.push({ toolCall: call, resolve, reject });
-                            this.onUpdate(this.messages);
-                        });
-                    }
-
-                    let resultOutput = "";
-                    if (approved) {
                         try {
-                            // EXECUTE TOOL
-                            if (toolDef) {
-                                resultOutput = await this.mcpManager.callTool(toolDef.serverId, toolDef.originalName, toolArgs);
-                            } else {
-                                resultOutput = `Error: Tool '${toolName}' not found.`;
-                            }
-                        } catch (e) {
-                            resultOutput = `Error executing tool: ${e}`;
+                            output = await this.mcpManager.callTool(
+                                reference.serverId,
+                                reference.originalName,
+                                safeJsonParse(call.function.arguments),
+                                controller.signal
+                            );
+                        } catch (error) {
+                            output = `Error executing tool: ${error}`;
                         }
-                    } else {
-                        resultOutput = "User rejected tool execution.";
                     }
-
-                    return {
+                    resultMessages.push({
                         id: crypto.randomUUID(),
-                        role: "tool" as const,
-                        content: resultOutput,
+                        role: "tool",
+                        content: output,
                         toolResult: {
                             toolCallId: call.id,
-                            output: resultOutput,
-                            name: toolName
+                            output,
+                            name: call.function.name
                         }
-                    };
-                });
-
-                // Wait for all tools to be processed (approved/executed or rejected)
-                const resultMessages = await Promise.all(toolPromises);
-                
-                // Append all results to history
+                    });
+                }
                 this.messages = [...this.messages, ...resultMessages];
                 this.onUpdate(this.messages);
 
-                // Recurse to handle any follow-up reasoning
-                await this.runLoop();
+                if (iteration === MAX_TOOL_ITERATIONS - 1) {
+                    this.messages = [...this.messages, {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "Tool execution stopped after reaching the maximum number of steps."
+                    }];
+                    this.onUpdate(this.messages);
+                }
             }
-        } catch (e) {
-            console.error("Agent Loop Error:", e);
-            const errMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: `Error: ${e}`
-            };
-            this.messages = [...this.messages, errMsg];
-            this.onUpdate(this.messages);
+        } catch (error) {
+            if (!isAbortError(error)) {
+                console.error("Agent loop error:", error);
+                this.messages = [...this.messages, {
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    content: `Error: ${error}`
+                }];
+                this.onUpdate(this.messages);
+            }
         } finally {
+            this.requestAbortController = null;
+            this.pendingApprovals = [];
             this.isProcessing = false;
             this.onUpdate(this.messages);
-            await this.saveCurrentChat();
+            try {
+                await this.saveCurrentChat();
+                await this.historyStore.flush();
+            } catch (persistenceError) {
+                console.error("Failed to persist chat history:", persistenceError);
+            }
         }
+    }
+
+    private waitForApproval(toolCall: ToolCall): Promise<boolean> {
+        return new Promise(resolve => {
+            this.pendingApprovals.push({ toolCall, resolve });
+            this.onUpdate(this.messages);
+        });
     }
 
     public getToolDisplayName(fullName: string): string {
-        const metadata = this.toolMetadata.get(fullName);
-        if (metadata?.title) {
-            return metadata.title;
-        }
-
-        // Fallback: Clean up raw name
-        return formatToolName(fullName);
-    }
-
-    private async generateTitle(messages: ChatMessage[]): Promise<string> {
-        try {
-            // Create a separate context for title generation to avoid polluting the main context
-            const titleMessages: ChatMessage[] = [
-                {
-                    id: "system-title",
-                    role: "system",
-                    content: "You are a helpful assistant. Summarize the user's request into a concise title (max 5 words). return the title only. Do not use quotes or punctuation."
-                },
-                ...messages.filter(m => m.role === 'user').slice(0, 1) // Only use the first user message for speed/relevance
-            ];
-            
-            // We use a separate non-streaming call if possible, but LlmClient is streaming-focused.
-            // We can just use the same client and collect the output.
-            let title = "";
-            await this.llm.chatCompletion(titleMessages, [], (chunk) => {
-                title += chunk;
-            });
-            
-            return title.trim().replace(/^["']|["']$/g, '');
-        } catch (e) {
-            console.error("Error generating title:", e);
-            return "";
-        }
+        return this.toolMetadata.get(fullName)?.title || formatToolName(fullName);
     }
 }

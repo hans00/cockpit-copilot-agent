@@ -76,6 +76,8 @@ export interface ChatSession {
     title: string;
     messages: ChatMessage[];
     lastModified: number;
+    messageCount?: number;
+    loadedMessageCount?: number;
 }
 
 export type ChatSessionSummary = Omit<ChatSession, "messages">;

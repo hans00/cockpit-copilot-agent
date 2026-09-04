@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Chatbot, { ChatbotDisplayMode } from '@patternfly/chatbot/dist/dynamic/Chatbot';
 import ChatbotContent from '@patternfly/chatbot/dist/dynamic/ChatbotContent';
 import ChatbotFooter from '@patternfly/chatbot/dist/dynamic/ChatbotFooter';
@@ -26,6 +26,17 @@ interface ChatPanelProps {
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcessing }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
+
+    const parseToolArguments = (value: string): Record<string, unknown> => {
+        try {
+            const parsed: unknown = JSON.parse(value);
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
+                return parsed as Record<string, unknown>;
+            return {};
+        } catch {
+            return {};
+        }
+    };
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -56,32 +67,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
     return (
         <Chatbot displayMode={ChatbotDisplayMode.embedded}>
             <ChatbotContent>
-                {messages.length === 0 ? (
-                    <EmptyState>
-                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                            <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
-                            <h4 className="pf-v6-c-title pf-m-lg">{tCockpitCopilot}</h4>
-                        </div>
-                        <EmptyStateBody>
-                            {tGreeting}
-                        </EmptyStateBody>
-                    </EmptyState>
-                ) : (
-                    <MessageBox>
-                        {messages.map((msg, index) => {
-                            const messageElements = [];
+                {messages.length === 0
+                    ? (
+                        <EmptyState>
+                            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                                <RobotIcon style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--pf-v6-global--Color--200)' }} />
+                                <h4 className="pf-v6-c-title pf-m-lg">{tCockpitCopilot}</h4>
+                            </div>
+                            <EmptyStateBody>
+                                {tGreeting}
+                            </EmptyStateBody>
+                        </EmptyState>
+                    )
+                    : (
+                        <MessageBox>
+                            {messages.map((msg, index) => {
+                                const messageElements = [];
 
-                            if (msg.role === 'tool') {
-                                const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
-                                messageElements.push(
-                                    <ToolResponse
+                                if (msg.role === 'tool') {
+                                    const toolName = agent.getToolDisplayName(msg.toolResult?.name || "");
+                                    messageElements.push(
+                                        <ToolResponse
                                         key={msg.id}
                                         toggleContent={<>{tToolCalling}: <strong>{toolName}</strong></>}
                                         body={(
                                             <div>
                                                 {msg.toolResult?.toolCallId && messages.find(m => m.toolCalls?.some(tc => tc.id === msg.toolResult?.toolCallId))?.toolCalls?.find(tc => tc.id === msg.toolResult?.toolCallId) && (
                                                     <div style={{ marginBottom: '1rem' }}>
-                                                        <ToolArguments args={JSON.parse(messages.find(m => m.toolCalls?.some(tc => tc.id === msg.toolResult?.toolCallId))?.toolCalls?.find(tc => tc.id === msg.toolResult?.toolCallId)?.function.arguments || "{}")} />
+                                                        <ToolArguments args={parseToolArguments(messages.find(m => m.toolCalls?.some(tc => tc.id === msg.toolResult?.toolCallId))?.toolCalls?.find(tc => tc.id === msg.toolResult?.toolCallId)?.function.arguments || "{}")} />
                                                     </div>
                                                 )}
                                                 <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
@@ -91,28 +104,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                         )}
                                         isBodyMarkdown={false}
                                         isDefaultExpanded={false}
-                                    />
-                                );
-                            } else {
-                                messageElements.push(
-                                    <Message
+                                        />
+                                    );
+                                } else {
+                                    messageElements.push(
+                                        <Message
                                         key={msg.id}
                                         role={msg.role === 'user' ? 'user' : 'bot'}
                                         content={msg.content}
                                         name={msg.role === 'user' ? tYou : tCopilot}
-                                    />
-                                );
+                                        />
+                                    );
 
-                                // Render associated tool calls inline
-                                if (msg.role === 'assistant' && msg.toolCalls) {
-                                    msg.toolCalls.forEach(tc => {
-                                        const isPending = agent.pendingApprovals.some(p => p.toolCall.id === tc.id);
-                                        const isDone = messages.some(m => m.role === 'tool' && m.toolResult?.toolCallId === tc.id);
+                                    // Render associated tool calls inline
+                                    if (msg.role === 'assistant' && msg.toolCalls) {
+                                        msg.toolCalls.forEach(tc => {
+                                            const isPending = agent.pendingApprovals.some(p => p.toolCall.id === tc.id);
+                                            const isDone = messages.some(m => m.role === 'tool' && m.toolResult?.toolCallId === tc.id);
 
-                                        // Only render if pending or processing (not done)
-                                        if (!isDone) {
-                                            messageElements.push(
-                                                <ToolCall
+                                            // Only render if pending or processing (not done)
+                                            if (!isDone) {
+                                                messageElements.push(
+                                                    <ToolCall
                                                     key={tc.id}
                                                     titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(tc.function.name)}`}
                                                     runButtonText={isPending ? tApproveRun : _("Running...")}
@@ -127,41 +140,41 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                                         isDisabled: !isPending
                                                     }}
                                                     expandableContent={
-                                                        <ToolArguments args={JSON.parse(tc.function.arguments)} />
+                                                        <ToolArguments args={parseToolArguments(tc.function.arguments)} />
                                                     }
                                                     isDefaultExpanded
-                                                />
-                                            );
-                                        }
-                                    });
-                                }
+                                                    />
+                                                );
+                                            }
+                                        });
+                                    }
 
-                                // Show regenerate button for the very last message if it is an assistant message
-                                const isLastMessage = index === messages.length - 1;
-                                if (isLastMessage && msg.role === 'assistant' && !isProcessing && !agent.pendingApprovals.length) {
-                                    messageElements.push(
-                                        <div key="actions" style={{ marginLeft: '3.5rem', marginTop: '0.5rem' }}>
-                                             <Button 
-                                                variant="link" 
-                                                icon={<RedoIcon />} 
+                                    // Show regenerate button for the very last message if it is an assistant message
+                                    const isLastMessage = index === messages.length - 1;
+                                    if (isLastMessage && msg.role === 'assistant' && !isProcessing && !agent.pendingApprovals.length) {
+                                        messageElements.push(
+                                            <div key="actions" style={{ marginLeft: '3.5rem', marginTop: '0.5rem' }}>
+                                                <Button
+                                                variant="link"
+                                                icon={<RedoIcon />}
                                                 onClick={() => agent.regenerateLastResponse()}
                                                 size="sm"
-                                            >
-                                                {_("Regenerate")}
-                                            </Button>
-                                        </div>
-                                    );
+                                                >
+                                                    {_("Regenerate")}
+                                                </Button>
+                                            </div>
+                                        );
+                                    }
                                 }
-                            }
-                            return messageElements;
-                        })}
+                                return messageElements;
+                            })}
 
-                        {isProcessing && !hasPendingApprovals && (
-                             <Message role="bot" isLoading loadingWord={tThinking} />
-                        )}
-                        <div ref={bottomRef} />
-                    </MessageBox>
-                )}
+                            {isProcessing && !hasPendingApprovals && (
+                                <Message role="bot" isLoading loadingWord={tThinking} />
+                            )}
+                            <div ref={bottomRef} />
+                        </MessageBox>
+                    )}
             </ChatbotContent>
             <ChatbotFooter>
                 <MessageBar
@@ -170,6 +183,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                     isSendButtonDisabled={isProcessing || hasPendingApprovals}
                     hasAttachButton={false} // Disable attachments for now as logic isn't ported
                 />
+                {isProcessing && (
+                    <Button variant="link" onClick={() => agent.cancel()}>
+                        {_("Stop")}
+                    </Button>
+                )}
             </ChatbotFooter>
         </Chatbot>
     );

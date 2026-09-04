@@ -48,6 +48,19 @@ ln -s `pwd`/dist ~/.local/share/cockpit/cockpit-copilot-agent
 After changing the code and running `make` again, reload the Cockpit page in
 your browser.
 
+## Runtime data and custom endpoints
+
+The settings in `/etc/cockpit/copilot-settings.json` and the API key in
+`/etc/cockpit/copilot.credentials.json` are intentionally shared by all authorized
+users of the host. Chat history is kept per user under
+`~/.local/share/cockpit/copilot-chats/`; old history is migrated from
+`~/.local/share/cockpit/copilot-history.json`.
+
+The `Custom (OpenAI Compatible)` provider uses the installed
+`/usr/libexec/cockpit-copilot-agent-llm-proxy` helper so arbitrary endpoint URLs do
+not need to be listed in the Cockpit manifest CSP. This helper only adapts the
+transport; it is not a security boundary between authorized host users.
+
 You can also use
 [watch mode](https://esbuild.github.io/api/#watch) to
 automatically update the bundle on every code change with

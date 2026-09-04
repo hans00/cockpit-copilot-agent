@@ -71,7 +71,8 @@ export class McpServerLocal {
                     title: "Sudo Shell",
                     description: "Run a shell command with sudo",
                     inputSchema: z.object({
-                        run_as: z.string().optional().describe("User to run as"),
+                        run_as: z.string().optional()
+                                .describe("User to run as"),
                         command: z.string().describe("Command to run in sudo")
                     })
                 },
@@ -91,7 +92,8 @@ export class McpServerLocal {
                 title: "List services",
                 description: "List all systemd units",
                 inputSchema: z.object({
-                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                    scope: z.enum(["system", "user"]).default("system")
+                            .describe("Systemd scope")
                 }),
                 _meta: { isLowRisk: true }
             },
@@ -110,7 +112,8 @@ export class McpServerLocal {
                 description: "Get status of a systemd unit",
                 inputSchema: z.object({
                     unit: z.string().describe("Unit name"),
-                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                    scope: z.enum(["system", "user"]).default("system")
+                            .describe("Systemd scope")
                 }),
                 _meta: { isLowRisk: true }
             },
@@ -130,7 +133,8 @@ export class McpServerLocal {
                 inputSchema: z.object({
                     unit: z.string().describe("Unit name"),
                     action: z.enum(["start", "stop", "restart", "reload", "enable", "disable"]).describe("Action to perform"),
-                    scope: z.enum(["system", "user"]).default("system").describe("Systemd scope")
+                    scope: z.enum(["system", "user"]).default("system")
+                            .describe("Systemd scope")
                 })
             },
             async ({ unit, action, scope }) => {
@@ -342,8 +346,10 @@ export class McpServerLocal {
                 title: "Query system logs",
                 description: "Query system logs (journalctl)",
                 inputSchema: z.object({
-                    service: z.string().optional().describe("Filter by systemd unit"),
-                    lines: z.number().default(50).describe("Number of lines")
+                    service: z.string().optional()
+                            .describe("Filter by systemd unit"),
+                    lines: z.number().default(50)
+                            .describe("Number of lines")
                 }),
                 _meta: { isLowRisk: true }
             },
@@ -435,8 +441,8 @@ export class McpServerLocal {
             const hostname = (await cockpit.spawn(["hostname"])).trim();
             const uptime = (await cockpit.spawn(["uptime", "-p"])).trim();
             return `Hostname: ${hostname}\nUptime: ${uptime}`;
-        } catch (e: any) {
-            return `Error getting system info: ${e.message || e}`;
+        } catch (e: unknown) {
+            return `Error getting system info: ${e instanceof Error ? e.message : String(e)}`;
         }
     }
 
@@ -449,8 +455,12 @@ export class McpServerLocal {
             new SmartPlugin()
         ];
 
-        for (const plugin of allPlugins) {
-            if (await plugin.detect()) {
+        const detected = await Promise.all(allPlugins.map(async plugin => ({
+            plugin,
+            available: await plugin.detect()
+        })));
+        for (const { plugin, available } of detected) {
+            if (available) {
                 this.plugins.push(plugin);
                 // Register plugin tools
                 plugin.register(this.server);

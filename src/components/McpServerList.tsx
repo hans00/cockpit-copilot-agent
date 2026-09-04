@@ -19,12 +19,12 @@ const normalizeUrl = (url: string | URL): string => {
     } catch {
         return String(url);
     }
-}
+};
 
 // Hide args too long
 const normalizeCommand = (command: string): string => {
     return command.replace(/\s+/g, " ").substring(0, 20) + (command.length > 20 ? "..." : "");
-}
+};
 
 interface McpServerListProps {
     servers: McpServerConfig[];
@@ -42,12 +42,12 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
 
     const handleAdd = () => {
         if (readOnly) return;
-        
+
         let newServer: McpServerConfig;
 
         if (newServerTransport === "stdio") {
-             const args = newServerArgs.split(" ").filter(s => s.trim().length > 0);
-             newServer = {
+            const args = newServerArgs.split(" ").filter(s => s.trim().length > 0);
+            newServer = {
                 id: uuidv4(),
                 name: newServerName,
                 transport: "stdio",
@@ -64,7 +64,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
                 enabled: true
             };
         }
-       
+
         onUpdate([...servers, newServer]);
         setIsModalOpen(false);
         resetForm();
@@ -91,7 +91,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
     const modalFooter = (
         <div className="pf-v6-c-modal-box__footer">
             <Button key="confirm" variant="primary" onClick={handleAdd}>{_("Add")}</Button>
-            <Button key="cancel" variant="link" onClick={() => { setIsModalOpen(false); resetForm(); }}>{_("Cancel")}</Button>
+            <Button key="cancel" variant="link" onClick={() => { setIsModalOpen(false); resetForm() }}>{_("Cancel")}</Button>
         </div>
     );
 
@@ -119,13 +119,15 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
                                         </div>
                                     </DataListCell>,
                                     <DataListCell key="details">
-                                        {server.transport === "http" ? (
-                                            <code title={normalizeUrl(server.url!)}>
-                                                {normalizeUrl(server.url!)}
-                                            </code>
-                                        ) : (
-                                            <code>{normalizeCommand(`${server.command} ${(server.args || []).join(" ")}`)}</code>
-                                        )}
+                                        {server.transport === "http"
+                                            ? (
+                                                <code title={normalizeUrl(server.url!)}>
+                                                    {normalizeUrl(server.url!)}
+                                                </code>
+                                            )
+                                            : (
+                                                <code>{normalizeCommand(`${server.command} ${(server.args || []).join(" ")}`)}</code>
+                                            )}
                                     </DataListCell>
                                 ]}
                             />
@@ -168,7 +170,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
             <Modal
                 variant={ModalVariant.medium}
                 isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); resetForm(); }}
+                onClose={() => { setIsModalOpen(false); resetForm() }}
             >
                 <ModalHeader title={_("Add Custom MCP Server")} />
                 <ModalBody>
@@ -182,66 +184,68 @@ export const McpServerList: React.FC<McpServerListProps> = ({ servers, onUpdate,
                                 onChange={(_e, val) => setNewServerName(val)}
                             />
                         </FormGroup>
-                        
+
                         <FormGroup label={_("Transport Type")} fieldId="server-transport" isRequired>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <input 
-                                        type="radio" 
-                                        name="transport" 
-                                        value="stdio" 
-                                        checked={newServerTransport === "stdio"} 
-                                        onChange={() => setNewServerTransport("stdio")} 
+                                    <input
+                                        type="radio"
+                                        name="transport"
+                                        value="stdio"
+                                        checked={newServerTransport === "stdio"}
+                                        onChange={() => setNewServerTransport("stdio")}
                                     />
                                     {_("Stdio")}
                                 </label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <input 
-                                        type="radio" 
-                                        name="transport" 
-                                        value="http" 
-                                        checked={newServerTransport === "http"} 
-                                        onChange={() => setNewServerTransport("http")} 
+                                    <input
+                                        type="radio"
+                                        name="transport"
+                                        value="http"
+                                        checked={newServerTransport === "http"}
+                                        onChange={() => setNewServerTransport("http")}
                                     />
                                     {_("Streamable HTTP")}
                                 </label>
                             </div>
                         </FormGroup>
 
-                        {newServerTransport === "stdio" ? (
-                            <>
-                                <FormGroup label={_("Command")} fieldId="server-command" isRequired>
-                                    <TextInput
+                        {newServerTransport === "stdio"
+                            ? (
+                                <>
+                                    <FormGroup label={_("Command")} fieldId="server-command" isRequired>
+                                        <TextInput
                                         isRequired
                                         type="text"
                                         id="server-command"
                                         value={newServerCommand}
                                         onChange={(_e, val) => setNewServerCommand(val)}
                                         placeholder="e.g. python3"
-                                    />
-                                </FormGroup>
-                                <FormGroup label={_("Arguments")} fieldId="server-args">
-                                    <TextInput
+                                        />
+                                    </FormGroup>
+                                    <FormGroup label={_("Arguments")} fieldId="server-args">
+                                        <TextInput
                                         type="text"
                                         id="server-args"
                                         value={newServerArgs}
                                         onChange={(_e, val) => setNewServerArgs(val)}
                                         placeholder="e.g. /path/to/server.py --flag"
-                                    />
-                                </FormGroup>
-                            </>
-                        ) : (
-                            <FormGroup label={_("Server URL")} fieldId="server-url" isRequired>
-                                <TextInput
+                                        />
+                                    </FormGroup>
+                                </>
+                            )
+                            : (
+                                <FormGroup label={_("Server URL")} fieldId="server-url" isRequired>
+                                    <TextInput
                                     isRequired
                                     type="url"
                                     id="server-url"
                                     value={newServerUrl}
                                     onChange={(_e, val) => setNewServerUrl(val)}
                                     placeholder="e.g. http://localhost:3000/mcp"
-                                />
-                            </FormGroup>
-                        )}
+                                    />
+                                </FormGroup>
+                            )}
                     </Form>
                 </ModalBody>
                 <ModalFooter>
