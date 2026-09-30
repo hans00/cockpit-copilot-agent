@@ -263,6 +263,148 @@ test("listUpdates treats the manager's 'updates available' exit code as success"
     assert.match(report, /^Reboot required\./m);
 });
 
+test("diffTexts collapses unchanged lines around edits", async () => {
+    const { diffTexts } = await sourceModule("./src/lib/diff.ts");
+    const before = Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\n") + "\n";
+    const after = before.replace("line 10\n", "line ten\n").replace("line 19\n", "line 19\nline 20\n");
+    assert.deepEqual(diffTexts(before, after, 1), [
+        { type: "skip", text: "9 unchanged lines" },
+        { type: "context", text: "line 9" },
+        { type: "remove", text: "line 10" },
+        { type: "add", text: "line ten" },
+        { type: "context", text: "line 11" },
+        { type: "skip", text: "7 unchanged lines" },
+        { type: "context", text: "line 19" },
+        { type: "add", text: "line 20" },
+    ]);
+    assert.deepEqual(diffTexts("", "a\nb\n"), [{ type: "add", text: "a" }, { type: "add", text: "b" }]);
+    assert.deepEqual(diffTexts("same\n", "same\n"), []);
+});
+
+test("canRememberApproval never covers shell or sensitive-path reads", async () => {
+    const { canRememberApproval } = await sourceModule("./src/lib/tool-policy.ts");
+    assert.equal(canRememberApproval(builtin("service_action", false)), true);
+    assert.equal(canRememberApproval(builtin("shell", false)), false);
+    assert.equal(canRememberApproval(builtin("sudo_shell", false)), false);
+    assert.equal(canRememberApproval(builtin("file_read", true)), false);
+    assert.equal(canRememberApproval({ ...builtin("x"), builtin: false }), true);
+    assert.equal(canRememberApproval(undefined), false);
+});
+
+// Build an Agent whose LLM, MCP manager and history are scripted doubles.
+const scriptedAgent = async ({ responses, tools, callTool, maxToolSteps = 25 }) => {
+    const { Agent } = await sourceModule("./src/lib/agent.ts");
+    const manager = {
+        listAllTools: async () => tools,
+        callTool,
+        close: async () => {}
+    };
+    const updates = [];
+    const settings = {
+        llm: { provider: "openai", apiKey: "k", baseUrl: "https://example.invalid/v1", model: "m" },
+        mcpServers: [],
+        customSystemPrompt: "",
+        allowShellAccess: false,
+        maxToolSteps
+    };
+    const agent = new Agent(settings, manager, messages => updates.push(messages));
+    let round = 0;
+    agent.llm = {
+        chatCompletion: async () => {
+            const next = typeof responses === "function" ? responses(round) : responses[round];
+            round++;
+            return { id: `msg-${round}`, role: "assistant", content: "", ...next };
+        }
+    };
+    agent.historyStore = { saveChat: async () => {}, flush: async () => {} };
+    return { agent, updates, rounds: () => round };
+};
+
+const call = (id, name, args = {}) => ({ id, function: { name, arguments: JSON.stringify(args) } });
+
+const waitFor = async (predicate, message) => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+        if (predicate())
+            return;
+        await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    assert.fail(message);
+};
+
+test("Agent runs auto-approved calls concurrently and orders them around approvals", async () => {
+    globalThis.__toolsCockpit.file = () => ({ read: async () => "old\n", close() {} });
+    const log = [];
+    const inFlight = new Set();
+    let maxConcurrent = 0;
+    const { agent } = await scriptedAgent({
+        tools: [builtin("service_status"), builtin("process_top"), builtin("file_write", false)],
+        responses: [
+            {
+                toolCalls: [
+                    call("a", "system_tools__service_status"),
+                    call("b", "system_tools__process_top"),
+                    call("w1", "system_tools__file_write", { path: "/etc/demo.conf", content: "new\n" }),
+                    call("c", "system_tools__service_status"),
+                ]
+            },
+            { toolCalls: [call("w2", "system_tools__file_write", { path: "/etc/demo.conf", content: "newer\n" })] },
+            { content: "done" },
+        ],
+        callTool: async (_serverId, name, args) => {
+            const token = {};
+            log.push(`start ${name}${args.content ? ` ${args.content.trim()}` : ""}`);
+            inFlight.add(token);
+            maxConcurrent = Math.max(maxConcurrent, inFlight.size);
+            await new Promise(resolve => setTimeout(resolve, 20));
+            inFlight.delete(token);
+            log.push(`end ${name}`);
+            return `${name} ok`;
+        }
+    });
+
+    const loop = agent.addUserMessage("check and fix");
+    await waitFor(() => agent.pendingApprovals.length === 1, "file_write must wait for approval");
+    assert.equal(maxConcurrent, 2, "the two auto-approved reads must run concurrently");
+    assert.deepEqual(log.filter(entry => entry.startsWith("end")).length, 2,
+        "earlier calls must finish before the approval is shown");
+    const approval = agent.pendingApprovals[0];
+    assert.equal(approval.toolCall.id, "w1");
+    assert.equal(approval.canRemember, true);
+    assert.equal(approval.preview.kind, "diff");
+    assert.deepEqual(approval.preview.lines, [{ type: "remove", text: "old" }, { type: "add", text: "new" }]);
+
+    agent.approveToolCall("w1", "chat");
+    await loop;
+    assert.deepEqual(log.slice(4), [
+        "start file_write new", "end file_write",
+        "start service_status", "end service_status",
+        // Allowed for the chat: the second write ran without a prompt.
+        "start file_write newer", "end file_write",
+    ]);
+    const toolResults = agent.messages.filter(message => message.role === "tool").map(message => message.toolResult.toolCallId);
+    assert.deepEqual(toolResults, ["a", "b", "w1", "c", "w2"], "results must keep the model's call order");
+    assert.equal(agent.messages.at(-1).content, "done");
+
+    await agent.createNewChat().catch(() => {});
+    assert.equal(agent.chatAllowedTools.size, 0, "chat-scoped approvals must not carry over to a new chat");
+});
+
+test("Agent pauses at the step limit and can continue", async () => {
+    const { agent, rounds } = await scriptedAgent({
+        maxToolSteps: 2,
+        tools: [builtin("service_status")],
+        responses: round => round < 3 ? { toolCalls: [call(`s${round}`, "system_tools__service_status")] } : { content: "finished" },
+        callTool: async () => "ok"
+    });
+    await agent.addUserMessage("loop");
+    assert.equal(rounds(), 2);
+    assert.equal(agent.messages.at(-1).notice, "step-limit");
+    await agent.continueAfterStepLimit();
+    assert.equal(rounds(), 4);
+    assert.equal(agent.messages.at(-1).content, "finished");
+    assert.equal(agent.messages.filter(message => message.notice === "step-limit").length, 0);
+});
+
 const run = async () => {
     let failures = 0;
     for (const [index, { name, callback }] of tests.entries()) {

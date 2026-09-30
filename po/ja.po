@@ -285,3 +285,35 @@ msgstr "セキュリティレビュー"
 #: src/components/ChatPanel.tsx
 msgid "Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual."
 msgstr "読み取り専用のセキュリティレビューを行ってください：待ち受けポート、ファイアウォールの状態、SELinux/AppArmor、SSH ログイン失敗、最近のログイン。異常があれば強調してください。"
+
+#: src/components/ChatPanel.tsx
+msgid "Allow for this chat"
+msgstr "このチャットでは常に許可"
+
+#: src/components/ChatPanel.tsx
+msgid "Continue"
+msgstr "続行"
+
+#: src/components/SettingsPage.tsx
+msgid "Maximum tool steps per request"
+msgstr "リクエストあたりの最大ツールステップ数"
+
+#: src/components/SettingsPage.tsx
+msgid "When reached, the agent pauses and can be continued."
+msgstr "上限に達するとエージェントは一時停止し、続行できます。"
+
+#: src/components/ApprovalPreview.tsx
+msgid "New file $0"
+msgstr "新しいファイル $0"
+
+#: src/components/ApprovalPreview.tsx
+msgid "No changes to $0"
+msgstr "$0 に変更はありません"
+
+#: src/components/ApprovalPreview.tsx
+msgid "Changes to $0"
+msgstr "$0 への変更"
+
+#: src/components/ApprovalPreview.tsx
+msgid "$0 more lines not shown"
+msgstr "さらに $0 行は表示されていません"

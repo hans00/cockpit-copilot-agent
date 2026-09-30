@@ -268,3 +268,35 @@ msgstr "安全檢查"
 #: src/components/ChatPanel.tsx
 msgid "Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual."
 msgstr "做一次唯讀安全檢查：監聽埠、防火牆狀態、SELinux/AppArmor、SSH 登入失敗和近期登入紀錄。標出任何異常。"
+
+#: src/components/ChatPanel.tsx
+msgid "Allow for this chat"
+msgstr "本次對話都允許"
+
+#: src/components/ChatPanel.tsx
+msgid "Continue"
+msgstr "繼續"
+
+#: src/components/SettingsPage.tsx
+msgid "Maximum tool steps per request"
+msgstr "每次請求的最大工具步數"
+
+#: src/components/SettingsPage.tsx
+msgid "When reached, the agent pauses and can be continued."
+msgstr "達到上限時代理會暫停，之後可以繼續。"
+
+#: src/components/ApprovalPreview.tsx
+msgid "New file $0"
+msgstr "新檔案 $0"
+
+#: src/components/ApprovalPreview.tsx
+msgid "No changes to $0"
+msgstr "$0 沒有變更"
+
+#: src/components/ApprovalPreview.tsx
+msgid "Changes to $0"
+msgstr "$0 的變更"
+
+#: src/components/ApprovalPreview.tsx
+msgid "$0 more lines not shown"
+msgstr "還有 $0 行未顯示"

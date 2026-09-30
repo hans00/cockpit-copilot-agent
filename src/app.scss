@@ -4,3 +4,37 @@
 p {
     font-weight: bold;
 }
+
+.copilot-diff {
+    max-block-size: 24rem;
+    overflow: auto;
+    font-size: var(--pf-t--global--font--size--sm);
+    border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    padding-block: var(--pf-t--global--spacer--xs);
+}
+
+.copilot-diff > div {
+    padding-inline: var(--pf-t--global--spacer--sm);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.copilot-diff-add {
+    color: var(--pf-t--global--text--color--nonstatus--on-green--default);
+    background: var(--pf-t--global--color--nonstatus--green--default);
+}
+
+.copilot-diff-remove {
+    color: var(--pf-t--global--text--color--nonstatus--on-red--default);
+    background: var(--pf-t--global--color--nonstatus--red--default);
+}
+
+.copilot-diff-skip,
+.copilot-diff-note {
+    color: var(--pf-t--global--text--color--subtle);
+}
+
+.copilot-diff-note {
+    margin-block-end: var(--pf-t--global--spacer--sm);
+}

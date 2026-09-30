@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
-import { ChatMessage, CopilotSettings, ToolCall, McpTool, ChatSessionSummary } from "./types.js";
+import { ChatMessage, CopilotSettings, ToolCall, McpTool, ChatSessionSummary, ToolRegistration } from "./types.js";
 import { LlmClient } from "./llm-client.js";
 import { BUILTIN_SERVER_ID, McpClientManager } from "./mcp-client.js";
 import { McpServerLocal } from "./mcp/mcp-server-local.js";
@@ -8,12 +8,13 @@ import { LocalTransport } from "./mcp/local-transport.js";
 import { HistoryStore } from "./history-store.js";
 import { ensureCockpitReady } from "./cockpit-ready.js";
 import { diagnostics } from "./diagnostics.js";
-import { requiresApproval } from "./tool-policy.js";
+import { canRememberApproval, requiresApproval } from "./tool-policy.js";
+import { diffTexts, type DiffLine } from "./diff.js";
+import * as files from "./mcp/tools/files.js";
 
 type UpdateCallback = (messages: ChatMessage[]) => void;
 
 const MAX_CONTEXT_MESSAGES = 80;
-const MAX_TOOL_ITERATIONS = 8;
 const STREAM_UPDATE_INTERVAL_MS = 33;
 
 const formatToolName = (name: string): string =>
@@ -42,6 +43,18 @@ const throwIfAborted = (signal: AbortSignal): void => {
         throw new DOMException("Request aborted", "AbortError");
 };
 
+export type ApprovalPreview =
+    | { kind: "diff"; path: string; isNewFile: boolean; lines: DiffLine[] }
+    | { kind: "unavailable"; message: string };
+
+export interface PendingApproval {
+    toolCall: ToolCall;
+    resolve: (value: boolean) => void;
+    // Offered as "allow for this chat" in the approval card.
+    canRemember: boolean;
+    preview?: ApprovalPreview | undefined;
+}
+
 export class Agent {
     private settings: CopilotSettings;
     private llm: LlmClient;
@@ -57,13 +70,12 @@ export class Agent {
     private connectionGeneration = 0;
     private history: Record<string, ChatSessionSummary> = {};
     private toolMetadata = new Map<string, McpTool>();
+    // Tool names the user allowed for the rest of the current chat.
+    private chatAllowedTools = new Set<string>();
 
     public isProcessing = false;
     public currentChatId: string | null = null;
-    public pendingApprovals: {
-        toolCall: ToolCall;
-        resolve: (value: boolean) => void;
-    }[] = [];
+    public pendingApprovals: PendingApproval[] = [];
 
     constructor(settings: CopilotSettings, mcpManager: McpClientManager, onUpdate: UpdateCallback) {
         this.settings = settings;
@@ -159,6 +171,7 @@ export class Agent {
         await this.historyStore.flush();
         this.history[id] = { id, title: session.title, lastModified: now, messageCount: 0 };
         this.currentChatId = id;
+        this.chatAllowedTools.clear();
         this.messages = [];
         this.loadedMessageCount = 0;
         this.onUpdate(this.messages);
@@ -179,6 +192,7 @@ export class Agent {
 
         const session = await this.historyStore.loadChat(id);
         this.currentChatId = id;
+        this.chatAllowedTools.clear();
         this.messages = session?.messages || [];
         this.loadedMessageCount = session?.loadedMessageCount ?? this.messages.length;
         this.onUpdate(this.messages);
@@ -246,6 +260,7 @@ export class Agent {
             await this.loopPromise;
 
         this.settings = newSettings;
+        this.chatAllowedTools.clear();
         this.llm = this.createLlm(newSettings);
         await this.mcpManager.close();
         await this.setupConnection();
@@ -452,6 +467,18 @@ RULES:
         await this.startLoop();
     }
 
+    /** Resume after the step limit notice, keeping the work done so far. */
+    public async continueAfterStepLimit(): Promise<void> {
+        if (this.loopPromise)
+            return;
+        const lastMessage = this.messages[this.messages.length - 1];
+        if (lastMessage?.notice !== "step-limit")
+            return;
+        this.messages = this.messages.slice(0, -1);
+        this.onUpdate(this.messages);
+        await this.startLoop();
+    }
+
     public async regenerateLastResponse(): Promise<void> {
         if (this.loopPromise)
             return;
@@ -478,11 +505,13 @@ RULES:
         }
     }
 
-    public approveToolCall(toolCallId: string): void {
+    public approveToolCall(toolCallId: string, scope: "once" | "chat" = "once"): void {
         const index = this.pendingApprovals.findIndex(approval => approval.toolCall.id === toolCallId);
         if (index === -1)
             return;
         const [approval] = this.pendingApprovals.splice(index, 1);
+        if (scope === "chat" && approval.canRemember)
+            this.chatAllowedTools.add(approval.toolCall.function.name);
         approval.resolve(true);
         this.onUpdate(this.messages);
     }
@@ -520,7 +549,8 @@ RULES:
         this.onUpdate(this.messages);
 
         try {
-            for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+            const maxSteps = this.settings.maxToolSteps;
+            for (let iteration = 0; iteration < maxSteps; iteration++) {
                 throwIfAborted(controller.signal);
                 const tools = await this.mcpManager.listAllTools(controller.signal);
                 throwIfAborted(controller.signal);
@@ -567,55 +597,48 @@ RULES:
                 if (!response.toolCalls?.length)
                     break;
 
-                const resultMessages: ChatMessage[] = [];
+                // Calls that need no approval run concurrently. Before asking for
+                // an approval, every earlier call is awaited, and an approved
+                // call finishes before later calls start, so reads never race
+                // with the change they were issued around.
+                const home = cockpit.info.user.home;
+                const pending: Promise<ChatMessage>[] = [];
                 for (const call of response.toolCalls) {
                     throwIfAborted(controller.signal);
                     const reference = toolMap.get(call.function.name);
                     const args = safeJsonParse(call.function.arguments);
-                    const approved = requiresApproval(reference, args, cockpit.info.user.home)
-                        ? await this.waitForApproval(call, controller.signal)
-                        : true;
-                    throwIfAborted(controller.signal);
-                    let output: string;
-                    if (!approved) {
-                        output = "User rejected tool execution.";
-                    } else if (!reference) {
-                        output = `Error: Tool '${call.function.name}' not found.`;
-                    } else {
-                        try {
-                            throwIfAborted(controller.signal);
-                            output = await this.mcpManager.callTool(
-                                reference.serverId,
-                                reference.originalName,
-                                args,
-                                controller.signal
-                            );
-                            throwIfAborted(controller.signal);
-                        } catch (error) {
-                            if (isAbortError(error))
-                                throw error;
-                            output = `Error executing tool: ${error}`;
-                        }
+                    const needsApproval = requiresApproval(reference, args, home) &&
+                        !(canRememberApproval(reference) && this.chatAllowedTools.has(call.function.name));
+                    if (!needsApproval) {
+                        const execution = this.executeToolCall(call, reference, args, controller.signal);
+                        // Handled by Promise.all below; avoid an unhandled
+                        // rejection while an approval is still open.
+                        execution.catch(() => {});
+                        pending.push(execution);
+                        continue;
                     }
-                    resultMessages.push({
-                        id: crypto.randomUUID(),
-                        role: "tool",
-                        content: output,
-                        toolResult: {
-                            toolCallId: call.id,
-                            output,
-                            name: call.function.name
-                        }
-                    });
+
+                    await Promise.all(pending);
+                    const preview = await this.buildApprovalPreview(reference, args);
+                    throwIfAborted(controller.signal);
+                    const approved = await this.waitForApproval(call, controller.signal, canRememberApproval(reference), preview);
+                    throwIfAborted(controller.signal);
+                    const execution = approved
+                        ? this.executeToolCall(call, reference, args, controller.signal)
+                        : Promise.resolve(this.toolResultMessage(call, "User rejected tool execution."));
+                    await execution;
+                    pending.push(execution);
                 }
+                const resultMessages = await Promise.all(pending);
                 this.messages = [...this.messages, ...resultMessages];
                 this.onUpdate(this.messages);
 
-                if (iteration === MAX_TOOL_ITERATIONS - 1) {
+                if (iteration === maxSteps - 1) {
                     this.messages = [...this.messages, {
                         id: crypto.randomUUID(),
                         role: "assistant",
-                        content: "Tool execution stopped after reaching the maximum number of steps."
+                        content: `Paused after ${maxSteps} tool steps. Continue to let the agent keep working.`,
+                        notice: "step-limit"
                     }];
                     this.onUpdate(this.messages);
                 }
@@ -644,7 +667,64 @@ RULES:
         }
     }
 
-    private waitForApproval(toolCall: ToolCall, signal: AbortSignal): Promise<boolean> {
+    private toolResultMessage(call: ToolCall, output: string): ChatMessage {
+        return {
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: output,
+            toolResult: {
+                toolCallId: call.id,
+                output,
+                name: call.function.name
+            }
+        };
+    }
+
+    private async executeToolCall(
+        call: ToolCall,
+        reference: ToolRegistration | undefined,
+        args: Record<string, unknown>,
+        signal: AbortSignal
+    ): Promise<ChatMessage> {
+        if (!reference)
+            return this.toolResultMessage(call, `Error: Tool '${call.function.name}' not found.`);
+        let output: string;
+        try {
+            throwIfAborted(signal);
+            output = await this.mcpManager.callTool(reference.serverId, reference.originalName, args, signal);
+            throwIfAborted(signal);
+        } catch (error) {
+            if (isAbortError(error))
+                throw error;
+            output = `Error executing tool: ${error}`;
+        }
+        return this.toolResultMessage(call, output);
+    }
+
+    /** Show what a file write would change before the user approves it. */
+    private async buildApprovalPreview(
+        reference: ToolRegistration | undefined,
+        args: Record<string, unknown>
+    ): Promise<ApprovalPreview | undefined> {
+        if (!reference?.builtin || reference.originalName !== "file_write")
+            return undefined;
+        const { path, content } = args;
+        if (typeof path !== "string" || typeof content !== "string")
+            return undefined;
+        try {
+            const current = await files.readForPreview(path);
+            return { kind: "diff", path, isNewFile: current === null, lines: diffTexts(current ?? "", content) };
+        } catch (error) {
+            return { kind: "unavailable", message: `Current content unavailable: ${error instanceof Error ? error.message : String(error)}` };
+        }
+    }
+
+    private waitForApproval(
+        toolCall: ToolCall,
+        signal: AbortSignal,
+        canRemember: boolean,
+        preview?: ApprovalPreview
+    ): Promise<boolean> {
         return new Promise((resolve, reject) => {
             if (signal.aborted) {
                 reject(new DOMException("Request aborted", "AbortError"));
@@ -670,7 +750,7 @@ RULES:
                 resolve(value);
             };
 
-            this.pendingApprovals.push({ toolCall, resolve: settle });
+            this.pendingApprovals.push({ toolCall, resolve: settle, canRemember, preview });
             signal.addEventListener("abort", abortListener, { once: true });
             if (signal.aborted) {
                 abortListener();

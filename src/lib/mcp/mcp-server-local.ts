@@ -243,14 +243,16 @@ export class McpServerLocal {
             "file_write",
             {
                 title: "Write file",
-                description: "Write content to a file (requires root/permission)",
+                description: "Replace a file's entire content. Existing files are backed up first; root-owned files are written as root.",
                 inputSchema: z.object({
                     path: z.string().describe("Absolute path to file"),
-                    content: z.string().describe("Content to write")
+                    content: z.string().describe("Complete new content of the file"),
+                    backup: z.boolean().default(true)
+                            .describe("Back up the existing file before writing")
                 })
             },
-            async ({ path, content }) => {
-                const result = await files.writeFile(path, content);
+            async ({ path, content, backup }) => {
+                const result = await files.writeFile(path, content, { backup });
                 return {
                     content: [{ type: "text", text: result }]
                 };

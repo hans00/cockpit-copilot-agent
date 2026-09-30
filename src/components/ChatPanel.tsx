@@ -10,8 +10,9 @@ import ToolCall from '@patternfly/chatbot/dist/dynamic/ToolCall';
 import ToolResponse from '@patternfly/chatbot/dist/dynamic/ToolResponse';
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { EmptyState, EmptyStateBody, EmptyStateFooter, EmptyStateActions } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { RobotIcon, RedoIcon } from '@patternfly/react-icons';
+import { RobotIcon, RedoIcon, PlayIcon } from '@patternfly/react-icons';
 import { ToolArguments } from "./ToolArguments.jsx";
+import { ApprovalPreview } from "./ApprovalPreview.jsx";
 import { ChatMessage } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
 import { diagnostics, type DiagnosticSpan } from "../lib/diagnostics.js";
@@ -207,30 +208,50 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                     // Render associated tool calls inline
                                     if (msg.role === 'assistant' && msg.toolCalls) {
                                         msg.toolCalls.forEach(tc => {
-                                            const isPending = agent.pendingApprovals.some(p => p.toolCall.id === tc.id);
+                                            const approval = agent.pendingApprovals.find(p => p.toolCall.id === tc.id);
+                                            const isPending = approval !== undefined;
                                             const isDone = messages.some(m => m.role === 'tool' && m.toolResult?.toolCallId === tc.id);
+                                            const args = parseToolArguments(tc.function.arguments);
+                                            // The diff already shows the new content.
+                                            if (approval?.preview?.kind === "diff")
+                                                delete args.content;
+                                            const toolName = agent.getToolDisplayName(tc.function.name);
 
                                             // Only render if pending or processing (not done)
                                             if (!isDone) {
+                                                const actions = isPending
+                                                    ? [
+                                                        <Button key="run" variant="secondary" size="sm" onClick={() => agent.approveToolCall(tc.id)}>
+                                                            {tApproveRun}
+                                                        </Button>,
+                                                        ...(approval.canRemember
+                                                            ? [
+                                                                <Button key="chat" variant="link" size="sm" onClick={() => agent.approveToolCall(tc.id, "chat")}>
+                                                                    {_("Allow for this chat")}
+                                                                </Button>
+                                                            ]
+                                                            : []),
+                                                        <Button key="reject" variant="link" size="sm" onClick={() => agent.rejectToolCall(tc.id)}>
+                                                            {tReject}
+                                                        </Button>
+                                                    ]
+                                                    : [
+                                                        <Button key="running" variant="secondary" size="sm" isDisabled isLoading>
+                                                            {_("Running...")}
+                                                        </Button>
+                                                    ];
                                                 messageElements.push(
                                                     <ToolCall
                                                     key={tc.id}
-                                                    titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(tc.function.name)}`}
-                                                    runButtonText={isPending ? tApproveRun : _("Running...")}
-                                                    cancelButtonText={tReject}
-                                                    runButtonProps={{
-                                                        onClick: () => agent.approveToolCall(tc.id),
-                                                        isDisabled: !isPending,
-                                                        isLoading: !isPending
-                                                    }}
-                                                    cancelButtonProps={{
-                                                        onClick: () => agent.rejectToolCall(tc.id),
-                                                        isDisabled: !isPending
-                                                    }}
+                                                    titleText={isPending ? `${tToolApprovalRequired}: ${toolName}` : toolName}
+                                                    actions={actions}
                                                     expandableContent={
-                                                        <ToolArguments args={parseToolArguments(tc.function.arguments)} />
+                                                        <>
+                                                            <ToolArguments args={args} />
+                                                            {approval?.preview && <ApprovalPreview preview={approval.preview} />}
+                                                        </>
                                                     }
-                                                    isDefaultExpanded
+                                                    isDefaultExpanded={isPending}
                                                     />
                                                 );
                                             }
@@ -242,14 +263,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                     if (isLastMessage && msg.role === 'assistant' && !isProcessing && !agent.pendingApprovals.length) {
                                         messageElements.push(
                                             <div key="actions" style={{ marginLeft: '3.5rem', marginTop: '0.5rem' }}>
-                                                <Button
-                                                variant="link"
-                                                icon={<RedoIcon />}
-                                                onClick={() => agent.regenerateLastResponse()}
-                                                size="sm"
-                                                >
-                                                    {_("Regenerate")}
-                                                </Button>
+                                                {msg.notice === "step-limit"
+                                                    ? (
+                                                        <Button
+                                                        variant="secondary"
+                                                        icon={<PlayIcon />}
+                                                        onClick={() => agent.continueAfterStepLimit()}
+                                                        size="sm"
+                                                        >
+                                                            {_("Continue")}
+                                                        </Button>
+                                                    )
+                                                    : (
+                                                        <Button
+                                                        variant="link"
+                                                        icon={<RedoIcon />}
+                                                        onClick={() => agent.regenerateLastResponse()}
+                                                        size="sm"
+                                                        >
+                                                            {_("Regenerate")}
+                                                        </Button>
+                                                    )}
                                             </div>
                                         );
                                     }

@@ -29,20 +29,101 @@ export async function readFile(path: string): Promise<string> {
         const handle = cockpit.file(path, { max_read_size: MAX_READ_SIZE });
         const content = await handle.read();
         handle.close();
-        return content;
+        return content ?? `Error reading file: ${path} does not exist`;
     } catch (e: unknown) {
         return `Error reading file: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 
-export async function writeFile(path: string, content: string): Promise<string> {
+const SYSTEM_BACKUP_DIR = "/var/lib/cockpit-copilot-agent/backups";
+const userBackupDir = () => `${cockpit.info.user.home}/.local/share/cockpit/copilot-backups`;
+
+const timestamp = (date: Date): string =>
+    date.toISOString().replace(/[-:]/g, "")
+            .replace(/\..*$/, "")
+            .replace("T", "-");
+
+/**
+ * Copy an existing file into a backup tree that mirrors its absolute path.
+ *
+ * Backups live outside the file's own directory on purpose: a copy next to
+ * the original (e.g. in /etc/sudoers.d or a conf.d directory) could be
+ * picked up by the service that reads that directory.
+ */
+async function backupFile(path: string, superuser: boolean): Promise<string | null> {
+    const base = superuser ? SYSTEM_BACKUP_DIR : userBackupDir();
+    const target = `${base}/${timestamp(new Date())}${path}`;
+    const options = superuser ? { superuser: "require" as const } : {};
+    const directory = target.slice(0, target.lastIndexOf("/"));
+    const steps = [
+        ["mkdir", "-p", "--", directory],
+        ["chmod", "700", "--", base],
+        // -p keeps mode, ownership and timestamps so a restore is exact.
+        ["cp", "-p", "--", path, target],
+    ];
+    for (const argv of steps) {
+        const result = await execute(argv, options);
+        if (result.exitCode !== 0 || result.problem !== undefined)
+            return null;
+    }
+    return target;
+}
+
+export interface WriteOptions {
+    backup?: boolean;
+}
+
+export async function writeFile(path: string, content: string, options: WriteOptions = {}): Promise<string> {
+    if (!path.startsWith("/"))
+        return `Error writing file: ${path} is not an absolute path`;
+
+    const exists = (await execute(["test", "-e", path], { superuser: "try" })).exitCode === 0;
+    // Files the user cannot write themselves (typically under /etc) are
+    // written as root when the session has administrative access.
+    const parent = path.slice(0, path.lastIndexOf("/")) || "/";
+    const writable = (await execute(["test", "-w", exists ? path : parent])).exitCode === 0;
+    const superuser = !writable;
+
+    let backup: string | null = null;
+    if (exists && options.backup !== false) {
+        backup = await backupFile(path, superuser);
+        if (!backup)
+            return `Error writing file: could not back up ${path}; nothing was changed. Retry with backup=false to skip the backup.`;
+    }
+
+    const handle = cockpit.file(path, superuser ? { superuser: "require" } : {});
     try {
-        const handle = cockpit.file(path);
         await handle.replace(content);
-        handle.close();
-        return `Successfully wrote to ${path}`;
     } catch (e: unknown) {
         return `Error writing file: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+        handle.close();
+    }
+
+    // Replacing a file creates a new inode; restore the original mode and
+    // ownership from the backup copy.
+    if (backup) {
+        const reference = superuser ? { superuser: "require" as const } : {};
+        await execute(["chmod", `--reference=${backup}`, "--", path], reference);
+        if (superuser)
+            await execute(["chown", `--reference=${backup}`, "--", path], reference);
+    }
+
+    const lines = [`Successfully wrote ${content.length} characters to ${path}${superuser ? " (as root)" : ""}.`];
+    if (backup)
+        lines.push(`Previous version backed up to ${backup}. To roll back, read that file and write it back.`);
+    else if (!exists)
+        lines.push("The file did not exist before; delete it to roll back.");
+    return lines.join("\n");
+}
+
+/** Current content for previewing a write; null if the file does not exist. */
+export async function readForPreview(path: string): Promise<string | null> {
+    const handle = cockpit.file(path, { superuser: "try", max_read_size: MAX_READ_SIZE });
+    try {
+        return await handle.read();
+    } finally {
+        handle.close();
     }
 }
 

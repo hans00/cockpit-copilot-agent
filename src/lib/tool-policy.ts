@@ -91,6 +91,22 @@ export function isSensitivePath(path: string, home: string): boolean {
     return SENSITIVE_BASENAMES.some(pattern => pattern.test(basename));
 }
 
+// Approvals for these can never be remembered for a whole chat.
+const ALWAYS_ASK = new Set(["shell", "sudo_shell"]);
+
+/**
+ * Whether "allow for this chat" may be offered for a call that needs
+ * approval. Calls that only need approval because they touch a sensitive
+ * path, and arbitrary shell commands, are always asked for individually.
+ */
+export function canRememberApproval(reference: ToolRegistration | undefined): boolean {
+    if (!reference)
+        return false;
+    if (!reference.builtin)
+        return true;
+    return reference.tool._meta?.isLowRisk !== true && !ALWAYS_ASK.has(reference.originalName);
+}
+
 /**
  * Decide whether a tool call needs explicit user approval.
  *
