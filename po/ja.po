@@ -126,11 +126,8 @@ msgstr ""
 #: src/components/ChatPanel.tsx:46
 msgid ""
 "Hi! I'm your system agent using MCP. Ask me to manage services, install "
-"packages, or check system logs."
-msgstr ""
-"こんにちは！私は MCP を使用してシステムエージェントです。サービスを管理する "
-"か、パッケージをインストールするか、システムログを確認するかを私に 要求してく"
-"ださい。"
+"packages, or check system logs, or start with one of these:"
+msgstr "こんにちは！MCP を使うシステムエージェントです。サービスの管理、パッケージのインストール、システムログの確認などを依頼できます。以下のクイックアクションからも始められます："
 
 #: src/app.tsx:141
 msgid "Initializing Agent..."
@@ -248,3 +245,43 @@ msgstr "あなた"
 #: src/components/SettingsPage.tsx:37
 msgid "You do not have permission to save settings."
 msgstr "設定を保存する権限がありません。"
+
+#: src/components/ChatPanel.tsx
+msgid "Health check"
+msgstr "ヘルスチェック"
+
+#: src/components/ChatPanel.tsx
+msgid "Run a read-only health check of this system: resources, disk usage, failed services, recent errors in the journal, and pending updates. Summarize problems by severity."
+msgstr "このシステムの読み取り専用ヘルスチェックを実行してください：リソース、ディスク使用量、失敗したサービス、ジャーナルの最近のエラー、保留中の更新。問題を重大度別にまとめてください。"
+
+#: src/components/ChatPanel.tsx
+msgid "Why is it slow?"
+msgstr "なぜ遅い？"
+
+#: src/components/ChatPanel.tsx
+msgid "The system feels slow. Investigate CPU, memory, swap, disk usage and the top processes, and explain the most likely cause."
+msgstr "システムが遅く感じます。CPU、メモリ、スワップ、ディスク使用量、上位プロセスを調査し、最も可能性の高い原因を説明してください。"
+
+#: src/components/ChatPanel.tsx
+msgid "Failed services"
+msgstr "失敗したサービス"
+
+#: src/components/ChatPanel.tsx
+msgid "List failed systemd units, show the relevant journal errors for each, and suggest fixes without changing anything yet."
+msgstr "失敗した systemd ユニットを一覧表示し、それぞれの関連するジャーナルエラーを示して、まだ何も変更せずに修正案を提示してください。"
+
+#: src/components/ChatPanel.tsx
+msgid "Available updates"
+msgstr "利用可能な更新"
+
+#: src/components/ChatPanel.tsx
+msgid "Check for available package updates and whether a reboot is required. Do not install anything."
+msgstr "利用可能なパッケージ更新と再起動の要否を確認してください。何もインストールしないでください。"
+
+#: src/components/ChatPanel.tsx
+msgid "Security review"
+msgstr "セキュリティレビュー"
+
+#: src/components/ChatPanel.tsx
+msgid "Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual."
+msgstr "読み取り専用のセキュリティレビューを行ってください：待ち受けポート、ファイアウォールの状態、SELinux/AppArmor、SSH ログイン失敗、最近のログイン。異常があれば強調してください。"

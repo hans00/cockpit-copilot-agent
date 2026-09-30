@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
+import { execute, formatResult, run } from "./exec.js";
 
 const errorDetails = (error: unknown): { message: string; output?: string } => {
     if (error && typeof error === "object") {
@@ -94,4 +95,29 @@ export async function manageService(unit: string, action: string, scope: "system
     } catch (e: unknown) {
         return `Error: ${errorDetails(e).message}`;
     }
+}
+
+const scoped = (args: string[], scope: "system" | "user"): string[] =>
+    scope === "user" ? [args[0], "--user", ...args.slice(1)] : args;
+
+export async function listFailed(scope: "system" | "user" = "system"): Promise<UnitInfo[] | string> {
+    const result = await execute(scoped(["systemctl", "list-units", "--failed", "--all", "--plain", "--no-pager", "--no-legend"], scope));
+    if (result.exitCode !== 0 || result.problem !== undefined)
+        return formatResult(result);
+    return parseUnitList(result.output);
+}
+
+export async function listTimers(scope: "system" | "user" = "system"): Promise<string> {
+    return await run(scoped(["systemctl", "list-timers", "--all", "--no-pager"], scope));
+}
+
+export async function catUnit(unit: string, scope: "system" | "user" = "system"): Promise<string> {
+    return await run(scoped(["systemctl", "cat", "--no-pager", "--", unit], scope));
+}
+
+export async function listDependencies(unit: string, reverse: boolean, scope: "system" | "user" = "system"): Promise<string> {
+    const args = ["systemctl", "list-dependencies", "--no-pager", "--plain"];
+    if (reverse)
+        args.push("--reverse");
+    return await run(scoped([...args, "--", unit], scope));
 }

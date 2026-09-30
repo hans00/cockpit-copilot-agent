@@ -9,7 +9,7 @@ import MessageBar from '@patternfly/chatbot/dist/dynamic/MessageBar';
 import ToolCall from '@patternfly/chatbot/dist/dynamic/ToolCall';
 import ToolResponse from '@patternfly/chatbot/dist/dynamic/ToolResponse';
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
-import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
+import { EmptyState, EmptyStateBody, EmptyStateFooter, EmptyStateActions } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { RobotIcon, RedoIcon } from '@patternfly/react-icons';
 import { ToolArguments } from "./ToolArguments.jsx";
 import { ChatMessage } from "../lib/types.js";
@@ -105,7 +105,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
 
     // Extract strings for translation to ensure xgettext picks them up
     const tCockpitCopilot = _("Cockpit Copilot");
-    const tGreeting = _("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.");
+    const tGreeting = _("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs, or start with one of these:");
     const tToolCalling = _("Tool Calling");
     const tYou = _("You");
     const tCopilot = _("Copilot");
@@ -114,6 +114,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
     const tReject = _("Reject");
     const tThinking = _("Thinking...");
     const tPlaceholder = _("Type a command or ask a question...");
+
+    const quickActions = [
+        {
+            label: _("Health check"),
+            prompt: _("Run a read-only health check of this system: resources, disk usage, failed services, recent errors in the journal, and pending updates. Summarize problems by severity.")
+        },
+        {
+            label: _("Why is it slow?"),
+            prompt: _("The system feels slow. Investigate CPU, memory, swap, disk usage and the top processes, and explain the most likely cause.")
+        },
+        {
+            label: _("Failed services"),
+            prompt: _("List failed systemd units, show the relevant journal errors for each, and suggest fixes without changing anything yet.")
+        },
+        {
+            label: _("Available updates"),
+            prompt: _("Check for available package updates and whether a reboot is required. Do not install anything.")
+        },
+        {
+            label: _("Security review"),
+            prompt: _("Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual.")
+        },
+    ];
 
     return (
         <Chatbot displayMode={ChatbotDisplayMode.embedded}>
@@ -128,6 +151,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                             <EmptyStateBody>
                                 {tGreeting}
                             </EmptyStateBody>
+                            <EmptyStateFooter>
+                                <EmptyStateActions>
+                                    {quickActions.map(action => (
+                                        <Button
+                                            key={action.label}
+                                            variant="secondary"
+                                            isDisabled={isProcessing}
+                                            onClick={() => handleSendMessage(action.prompt)}
+                                        >
+                                            {action.label}
+                                        </Button>
+                                    ))}
+                                </EmptyStateActions>
+                            </EmptyStateFooter>
                         </EmptyState>
                     )
                     : (

@@ -207,6 +207,62 @@ test("readFile refuses a symlink that points at a sensitive file", async () => {
     assert.equal(await files.readFile("/etc/shadow"), "content");
 });
 
+test("buildJournalCommand maps filters and bounds line count", async () => {
+    const { buildJournalCommand, MAX_JOURNAL_LINES } = await sourceModule("./src/lib/mcp/tools/logs.ts");
+    assert.deepEqual(buildJournalCommand({}), ["journalctl", "--no-pager", "-n", "50"]);
+    assert.deepEqual(
+        buildJournalCommand({ service: "nginx.service", lines: 20, priority: "err", since: "-1h", grep: "timeout", boot: -1, kernel: true }),
+        ["journalctl", "--no-pager", "-n", "20", "-u", "nginx.service", "-p", "err", "--since", "-1h",
+            "--grep", "timeout", "--case-sensitive=false", "-b", "-1", "-k"]);
+    assert.equal(buildJournalCommand({ lines: 1e9 })[3], String(MAX_JOURNAL_LINES));
+    assert.equal(buildJournalCommand({ lines: -5 })[3], "1");
+});
+
+test("parseMeminfo reads the fields used for memory usage", async () => {
+    const { parseMeminfo } = await sourceModule("./src/lib/mcp/tools/system.ts");
+    const values = parseMeminfo("MemTotal:  2048 kB\nMemFree: 10 kB\nMemAvailable:  1024 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n");
+    assert.deepEqual(values, { MemTotal: 2048 * 1024, MemAvailable: 1024 * 1024, SwapTotal: 0, SwapFree: 0 });
+});
+
+test("argument validation rejects option-looking values before spawning", async () => {
+    const spawned = [];
+    globalThis.__toolsCockpit.spawn = fakeSpawn(argv => {
+        spawned.push(argv);
+        return { output: "" };
+    });
+    const packages = await sourceModule("./src/lib/mcp/tools/packages.ts");
+    const users = await sourceModule("./src/lib/mcp/tools/users.ts");
+    const network = await sourceModule("./src/lib/mcp/tools/network.ts");
+
+    assert.match(await packages.install(["--allow-downgrades"]), /invalid package name/);
+    assert.match(await packages.remove([]), /invalid package name/);
+    assert.match(await packages.search("-x"), /invalid search query/);
+    assert.match(await users.modifyUser("-o", "lock"), /invalid user name/);
+    assert.match(await users.modifyUser("alice", "add_group", "--root=/"), /invalid group name/);
+    assert.match(await users.modifyUser("alice", "add_group"), /group is required/);
+    assert.match(await network.checkConnectivity("-f example.com"), /invalid host/);
+    assert.deepEqual(spawned, [], "invalid arguments must not reach cockpit.spawn");
+});
+
+test("listUpdates treats the manager's 'updates available' exit code as success", async () => {
+    globalThis.__toolsCockpit.spawn = fakeSpawn(argv => {
+        const command = argv.join(" ");
+        if (command.startsWith("sh -c command -v"))
+            return { output: argv[3] === "dnf" ? "/usr/bin/dnf\n" : "", exitStatus: argv[3] === "dnf" ? 0 : 1 };
+        if (command === "dnf check-update -q")
+            return { output: "\nkernel.x86_64  6.9.1-100.fc40  updates\nopenssl.x86_64  3.2.2-1.fc40  updates\n", exitStatus: 100 };
+        if (argv[0] === "needs-restarting")
+            return { output: "Reboot is required to fully utilize these updates.\n", exitStatus: 1 };
+        return { output: "" };
+    });
+    globalThis.__toolsCockpit.file = () => ({ read: async () => { throw new Error("ENOENT") }, close() {} });
+    const packages = await sourceModule("./src/lib/mcp/tools/packages.ts");
+    const report = await packages.listUpdates(false);
+    assert.match(report, /Available updates \(dnf, 2\)/);
+    assert.match(report, /kernel\.x86_64/);
+    assert.match(report, /^Reboot required\./m);
+});
+
 const run = async () => {
     let failures = 0;
     for (const [index, { name, callback }] of tests.entries()) {
