@@ -21,6 +21,9 @@ import { ContainerPlugin } from "./plugins/containers.js";
 import { ZfsPlugin } from "./plugins/zfs.js";
 import { SmartPlugin } from "./plugins/smart.js";
 
+const MAX_MEMORY_ENTRIES = 100;
+const MAX_MEMORY_ENTRY_LENGTH = 1000;
+
 export type McpServerLocalOptions = {
     allow_shell_access: boolean;
 };
@@ -348,8 +351,11 @@ export class McpServerLocal {
                 inputSchema: z.object({
                     service: z.string().optional()
                             .describe("Filter by systemd unit"),
-                    lines: z.number().default(50)
-                            .describe("Number of lines")
+                    lines: z.number().int()
+                            .min(1)
+                            .max(logs.MAX_JOURNAL_LINES)
+                            .default(50)
+                            .describe(`Number of lines (max ${logs.MAX_JOURNAL_LINES})`)
                 }),
                 _meta: { isLowRisk: true }
             },
@@ -416,18 +422,25 @@ export class McpServerLocal {
                 _meta: { isLowRisk: true }
             },
             async ({ content }) => {
-                // Append content to memory file
+                // Append content to memory file, keeping only the newest
+                // entries so memory_read stays small enough for the context.
                 let memory: string[] = [];
                 const file = cockpit.file(memoryPath.replace("$HOME", cockpit.info.user.home));
                 try {
                     try {
-                        memory = JSON.parse(await file.read());
+                        const parsed: unknown = JSON.parse(await file.read());
+                        if (Array.isArray(parsed))
+                            memory = parsed.filter((entry): entry is string => typeof entry === "string");
                     } catch {
-                        // Ignore error
+                        // Missing or unreadable memory starts empty
                     }
-                    const result = await file.replace(JSON.stringify([...memory, content], null, 2));
+                    const entry = content.trim().slice(0, MAX_MEMORY_ENTRY_LENGTH);
+                    if (!entry)
+                        return { content: [{ type: "text", text: "Nothing to remember." }] };
+                    const next = [...memory.filter(existing => existing !== entry), entry].slice(-MAX_MEMORY_ENTRIES);
+                    await file.replace(JSON.stringify(next, null, 2));
                     return {
-                        content: [{ type: "text", text: result }]
+                        content: [{ type: "text", text: `Memory saved (${next.length}/${MAX_MEMORY_ENTRIES} entries).` }]
                     };
                 } finally {
                     file.close();

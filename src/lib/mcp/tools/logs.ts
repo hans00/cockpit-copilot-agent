@@ -1,15 +1,14 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
-import cockpit from "cockpit";
+import { run } from "./exec.js";
+
+export const MAX_JOURNAL_LINES = 1000;
 
 export async function queryJournal(service?: string, lines: number = 50): Promise<string> {
-    const cmd = ["journalctl", "--no-pager", "-n", lines.toString()];
+    const bounded = Math.min(Math.max(Math.trunc(lines) || 50, 1), MAX_JOURNAL_LINES);
+    const cmd = ["journalctl", "--no-pager", "-n", bounded.toString()];
     if (service) {
         cmd.push("-u", service);
     }
 
-    try {
-        return await cockpit.spawn(cmd);
-    } catch (e: unknown) {
-        return `Error querying journal: ${e instanceof Error ? e.message : String(e)}`;
-    }
+    return await run(cmd);
 }

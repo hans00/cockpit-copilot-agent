@@ -13,6 +13,14 @@ export interface McpTool {
     };
 }
 
+export interface ToolRegistration {
+    serverId: string;
+    originalName: string;
+    // True only for the in-process system tools shipped with this package.
+    builtin: boolean;
+    tool: McpTool;
+}
+
 export interface McpServerConfig {
     id: string; // uuid
     name: string; // e.g. "My DB Tools"

@@ -4,12 +4,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { McpServerConfig, McpTool } from "./types.js";
+import { McpServerConfig, McpTool, ToolRegistration } from "./types.js";
 import { LocalTransport } from "./mcp/local-transport.js";
 import { diagnostics } from "./diagnostics.js";
 
 const MCP_REQUEST_TIMEOUT_MS = 10000;
 const MAX_TOOL_OUTPUT_LENGTH = 64 * 1024;
+export const BUILTIN_SERVER_ID = "builtin";
 
 const isAbortError = (error: unknown): boolean =>
     (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") ||
@@ -79,6 +80,7 @@ type ToolReference = {
     serverId: string;
     originalName: string;
     serverName: string;
+    builtin: boolean;
     tool: RemoteTool;
 };
 
@@ -344,7 +346,7 @@ export class McpClientManager {
         }
     }
 
-    async listAllTools(signal?: AbortSignal): Promise<{ serverId: string; originalName: string; tool: McpTool }[]> {
+    async listAllTools(signal?: AbortSignal): Promise<ToolRegistration[]> {
         const stage = diagnostics.start("mcp.list_tools");
         const connections = Array.from(this.clients.values());
         if (signal?.aborted) {
@@ -389,6 +391,9 @@ export class McpClientManager {
                     serverId: connection.config.id,
                     originalName: tool.name,
                     serverName,
+                    // Only the in-process server shipped with this package is
+                    // trusted to declare its own risk metadata.
+                    builtin: connection.config.id === BUILTIN_SERVER_ID && connection.config.transport === "local",
                     tool
                 });
             }
@@ -402,7 +407,7 @@ export class McpClientManager {
             const serverPrefix = counts.get(reference.serverName)! > 1
                 ? `${reference.serverName}_${reference.serverId.slice(0, 8)}`
                 : reference.serverName;
-            const metadata = typeof reference.tool._meta?.isLowRisk === "boolean"
+            const metadata = reference.builtin && typeof reference.tool._meta?.isLowRisk === "boolean"
                 ? { isLowRisk: reference.tool._meta.isLowRisk as boolean }
                 : undefined;
             const normalizedTool: McpTool = {
@@ -418,6 +423,7 @@ export class McpClientManager {
             return {
                 serverId: reference.serverId,
                 originalName: reference.originalName,
+                builtin: reference.builtin,
                 tool: normalizedTool
             };
         });

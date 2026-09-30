@@ -17,29 +17,44 @@ const errorDetails = (error: unknown): { message: string; output?: string } => {
 
 export interface UnitInfo {
     unit: string;
+    load: string;
     status: string;
+    sub: string;
     description: string;
+}
+
+/**
+ * Parse `systemctl list-units --plain --no-legend` output.
+ *
+ * Without --plain, systemctl prefixes failed and not-found units with a
+ * status bullet, which shifts every column; tolerate it anyway in case
+ * the output comes from elsewhere.
+ */
+export function parseUnitList(output: string): UnitInfo[] {
+    const units: UnitInfo[] = [];
+    for (const line of output.split("\n")) {
+        const cleaned = line.trim().replace(/^[●*×○]\s+/, "");
+        const parts = cleaned.split(/\s+/);
+        if (!parts[0])
+            continue;
+        units.push({
+            unit: parts[0],
+            load: parts[1] || "unknown",
+            status: parts[2] || "unknown",
+            sub: parts[3] || "unknown",
+            description: parts.slice(4).join(" ")
+        });
+    }
+    return units;
 }
 
 export async function listUnits(scope: "system" | "user" = "system"): Promise<UnitInfo[]> {
     try {
-        const args = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"];
+        const args = ["systemctl", "list-units", "--type=service", "--all", "--plain", "--no-pager", "--no-legend"];
         if (scope === "user") {
             args.splice(1, 0, "--user");
         }
-        const result = await cockpit.spawn(args);
-        const units: UnitInfo[] = [];
-
-        for (const line of result.split("\n")) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 1 && parts[0]) {
-                const unit_name = parts[0];
-                const status = parts[2] || "unknown";
-                const desc = parts.slice(4).join(" ") || "";
-                units.push({ unit: unit_name, status, description: desc });
-            }
-        }
-        return units;
+        return parseUnitList(await cockpit.spawn(args));
     } catch (e: unknown) {
         console.error("Error listing units:", e);
         return [];

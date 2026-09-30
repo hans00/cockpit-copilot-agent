@@ -1,12 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
+import { execute, formatResult, run } from "./exec.js";
 
 export async function getInfo(): Promise<string> {
-    try {
-        return await cockpit.spawn(["ip", "-brief", "address"]);
-    } catch (e: unknown) {
-        return `Error getting network info: ${e instanceof Error ? e.message : String(e)}`;
-    }
+    return await run(["ip", "-brief", "address"]);
 }
 
 export async function downloadFile(url: string, dest: string): Promise<string> {
@@ -14,7 +11,8 @@ export async function downloadFile(url: string, dest: string): Promise<string> {
 
     try {
         await cockpit.spawn(["which", "curl"]);
-        cmd = ["curl", "-L", "-o", dest, url];
+        // -f: treat HTTP errors (404, 500...) as failures instead of saving the error page
+        cmd = ["curl", "-fsSL", "-o", dest, url];
     } catch {
         try {
             await cockpit.spawn(["which", "wget"]);
@@ -24,10 +22,8 @@ export async function downloadFile(url: string, dest: string): Promise<string> {
         }
     }
 
-    try {
-        await cockpit.spawn(cmd);
+    const result = await execute(cmd);
+    if (result.exitCode === 0 && result.problem === undefined)
         return `Successfully downloaded ${url} to ${dest}`;
-    } catch (e: unknown) {
-        return `Error downloading file: ${e instanceof Error ? e.message : String(e)}`;
-    }
+    return `Error downloading file:\n${formatResult(result)}`;
 }
