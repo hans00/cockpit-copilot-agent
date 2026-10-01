@@ -5,12 +5,19 @@ export type DiffLine = { type: "context" | "add" | "remove" | "skip"; text: stri
 // The LCS table is O(n*m); beyond this the diff degrades to remove-all/add-all.
 const MAX_LCS_CELLS = 2_000_000;
 
+export const NO_NEWLINE_MARKER = "\\ No newline at end of file";
+
 const splitLines = (text: string): string[] => {
     if (text === "")
         return [];
     const lines = text.split("\n");
-    if (lines[lines.length - 1] === "")
+    if (lines[lines.length - 1] === "") {
         lines.pop();
+    } else {
+        // Keep a missing final newline visible, so adding or removing it
+        // shows up as a change on the last line (as in `diff -u`).
+        lines[lines.length - 1] += `\n${NO_NEWLINE_MARKER}`;
+    }
     return lines;
 };
 

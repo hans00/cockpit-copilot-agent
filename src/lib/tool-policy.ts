@@ -81,7 +81,9 @@ export function isSensitivePath(path: string, home: string): boolean {
         return true;
     if (SENSITIVE_PREFIXES.some(prefix => normalized.startsWith(prefix)))
         return true;
-    if (/^\/proc\/[^/]+\/(environ|mem|maps|cmdline)$/.test(normalized))
+    // Per-process secrets are also reachable through each thread's entry
+    // (/proc/<pid>/task/<tid>/...) and via /proc/self or /proc/thread-self.
+    if (/^\/proc\/[^/]+(\/task\/[^/]+)?\/(environ|mem|maps|smaps|cmdline|auxv)$/.test(normalized))
         return true;
 
     const segments = normalized.split("/").filter(Boolean);

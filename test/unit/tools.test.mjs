@@ -112,6 +112,9 @@ test("isSensitivePath flags secrets after lexical normalization", async () => {
         "/etc/ssl/private/server.key",
         "/etc/ssh/ssh_host_ed25519_key",
         "/proc/1/environ",
+        "/proc/1/task/1/environ",
+        "/proc/self/task/42/cmdline",
+        "/proc/thread-self/environ",
         `${home}/.aws/credentials`,
         "relative/path",
     ])
@@ -279,6 +282,16 @@ test("diffTexts collapses unchanged lines around edits", async () => {
     ]);
     assert.deepEqual(diffTexts("", "a\nb\n"), [{ type: "add", text: "a" }, { type: "add", text: "b" }]);
     assert.deepEqual(diffTexts("same\n", "same\n"), []);
+    const marker = "\\ No newline at end of file";
+    assert.deepEqual(diffTexts("value", "value\n"), [
+        { type: "remove", text: `value\n${marker}` },
+        { type: "add", text: "value" },
+    ], "adding the final newline must be reported");
+    assert.deepEqual(diffTexts("a\nb\n", "a\nb"), [
+        { type: "context", text: "a" },
+        { type: "remove", text: "b" },
+        { type: "add", text: `b\n${marker}` },
+    ], "removing the final newline must be reported");
 });
 
 test("canRememberApproval never covers shell or sensitive-path reads", async () => {
