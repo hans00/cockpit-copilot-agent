@@ -418,6 +418,65 @@ test("Agent pauses at the step limit and can continue", async () => {
     assert.equal(agent.messages.filter(message => message.notice === "step-limit").length, 0);
 });
 
+test("writeFile rejects dot segments before touching the filesystem", async () => {
+    const spawned = [];
+    globalThis.__toolsCockpit.spawn = fakeSpawn(argv => {
+        spawned.push(argv);
+        return { output: "" };
+    });
+    globalThis.__toolsCockpit.file = () => {
+        throw new Error("cockpit.file must not be opened");
+    };
+    const files = await sourceModule("./src/lib/mcp/tools/files.ts");
+    for (const path of ["/../../../../log/messages", "/etc/./hosts", "/etc/nginx/..", "/srv/a/../b"])
+        assert.match(await files.writeFile(path, "x"), /contains "\." or "\.\." segments/, path);
+    assert.deepEqual(spawned, [], "no backup or write may run for a traversal path");
+});
+
+test("Agent serializes state-changing calls that skip approval", async () => {
+    const events = [];
+    let inFlight = 0;
+    let maxConcurrent = 0;
+    const { agent } = await scriptedAgent({
+        tools: [builtin("memory_write"), builtin("service_status"), builtin("file_write", false)],
+        responses: [
+            { toolCalls: [call("w0", "system_tools__file_write", { path: "/etc/a", content: "1\n" })] },
+            {
+                toolCalls: [
+                    call("m1", "system_tools__memory_write", { content: "one" }),
+                    call("m2", "system_tools__memory_write", { content: "two" }),
+                    call("w1", "system_tools__file_write", { path: "/etc/a", content: "2\n" }),
+                    call("r1", "system_tools__service_status"),
+                    call("r2", "system_tools__service_status"),
+                ]
+            },
+            { content: "done" },
+        ],
+        callTool: async (_serverId, name, args) => {
+            inFlight++;
+            maxConcurrent = Math.max(maxConcurrent, inFlight);
+            events.push(`start ${name} ${args.content ?? ""}`.trim());
+            await new Promise(resolve => setTimeout(resolve, 15));
+            events.push(`end ${name} ${args.content ?? ""}`.trim());
+            inFlight--;
+            return "ok";
+        }
+    });
+    globalThis.__toolsCockpit.file = () => ({ read: async () => null, close() {} });
+    const loop = agent.addUserMessage("go");
+    await waitFor(() => agent.pendingApprovals.length === 1, "first write must ask");
+    agent.approveToolCall("w0", "chat");
+    await loop;
+    assert.deepEqual(events.slice(2, 8), [
+        "start memory_write one", "end memory_write one",
+        "start memory_write two", "end memory_write two",
+        // Remembered for the chat, but still a mutation: runs alone.
+        "start file_write 2", "end file_write 2",
+    ]);
+    assert.equal(maxConcurrent, 2, "only the two trailing reads may overlap");
+    assert.deepEqual(events.slice(8).map(entry => entry.split(" ")[0]), ["start", "start", "end", "end"]);
+});
+
 const run = async () => {
     let failures = 0;
     for (const [index, { name, callback }] of tests.entries()) {

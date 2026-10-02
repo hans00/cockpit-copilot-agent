@@ -76,6 +76,11 @@ export interface WriteOptions {
 export async function writeFile(path: string, content: string, options: WriteOptions = {}): Promise<string> {
     if (!path.startsWith("/"))
         return `Error writing file: ${path} is not an absolute path`;
+    // The backup target is derived by appending the path to the backup
+    // directory, where "." and ".." would resolve differently than for the
+    // write itself (and could point a privileged copy at an unrelated file).
+    if (path.split("/").some(segment => segment === "." || segment === ".."))
+        return `Error writing file: ${path} contains "." or ".." segments; use a normalized absolute path`;
 
     const exists = (await execute(["test", "-e", path], { superuser: "try" })).exitCode === 0;
     // Files the user cannot write themselves (typically under /etc) are

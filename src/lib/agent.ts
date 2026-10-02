@@ -8,7 +8,7 @@ import { LocalTransport } from "./mcp/local-transport.js";
 import { HistoryStore } from "./history-store.js";
 import { ensureCockpitReady } from "./cockpit-ready.js";
 import { diagnostics } from "./diagnostics.js";
-import { canRememberApproval, requiresApproval } from "./tool-policy.js";
+import { canRememberApproval, isReadOnlyTool, requiresApproval } from "./tool-policy.js";
 import { diffTexts, type DiffLine } from "./diff.js";
 import * as files from "./mcp/tools/files.js";
 
@@ -597,9 +597,10 @@ RULES:
                 if (!response.toolCalls?.length)
                     break;
 
-                // Calls that need no approval run concurrently. Before asking for
-                // an approval, every earlier call is awaited, and an approved
-                // call finishes before later calls start, so reads never race
+                // Only side-effect-free calls run concurrently. Any other call
+                // (one needing approval, a remembered approval, or a low-risk
+                // tool that writes state) first waits for every earlier call
+                // and finishes before later calls start, so reads never race
                 // with the change they were issued around.
                 const home = cockpit.info.user.home;
                 const pending: Promise<ChatMessage>[] = [];
@@ -609,7 +610,7 @@ RULES:
                     const args = safeJsonParse(call.function.arguments);
                     const needsApproval = requiresApproval(reference, args, home) &&
                         !(canRememberApproval(reference) && this.chatAllowedTools.has(call.function.name));
-                    if (!needsApproval) {
+                    if (!needsApproval && isReadOnlyTool(reference)) {
                         const execution = this.executeToolCall(call, reference, args, controller.signal);
                         // Handled by Promise.all below; avoid an unhandled
                         // rejection while an approval is still open.
@@ -619,10 +620,13 @@ RULES:
                     }
 
                     await Promise.all(pending);
-                    const preview = await this.buildApprovalPreview(reference, args);
-                    throwIfAborted(controller.signal);
-                    const approved = await this.waitForApproval(call, controller.signal, canRememberApproval(reference), preview);
-                    throwIfAborted(controller.signal);
+                    let approved = true;
+                    if (needsApproval) {
+                        const preview = await this.buildApprovalPreview(reference, args);
+                        throwIfAborted(controller.signal);
+                        approved = await this.waitForApproval(call, controller.signal, canRememberApproval(reference), preview);
+                        throwIfAborted(controller.signal);
+                    }
                     const execution = approved
                         ? this.executeToolCall(call, reference, args, controller.signal)
                         : Promise.resolve(this.toolResultMessage(call, "User rejected tool execution."));

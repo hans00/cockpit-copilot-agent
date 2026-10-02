@@ -93,6 +93,20 @@ export function isSensitivePath(path: string, home: string): boolean {
     return SENSITIVE_BASENAMES.some(pattern => pattern.test(basename));
 }
 
+// Built-in low-risk tools that still change state, so they must not run
+// concurrently with other calls.
+const LOW_RISK_MUTATING = new Set(["memory_write"]);
+
+/**
+ * Whether a call has no side effects and may run concurrently with other
+ * such calls. Remembered approvals and external tools are never assumed to
+ * be read-only.
+ */
+export function isReadOnlyTool(reference: ToolRegistration | undefined): boolean {
+    return !!reference && reference.builtin && reference.tool._meta?.isLowRisk === true &&
+        !LOW_RISK_MUTATING.has(reference.originalName);
+}
+
 // Approvals for these can never be remembered for a whole chat.
 const ALWAYS_ASK = new Set(["shell", "sudo_shell"]);
 
