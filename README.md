@@ -58,6 +58,12 @@ users of the host. Chat history is kept per user under
 `~/.local/share/cockpit/copilot-chats/`; old history is migrated from
 `~/.local/share/cockpit/copilot-history.json`.
 
+Before the `file_write` tool replaces an existing file, it copies the previous
+version into a backup tree that mirrors the original path:
+`/var/lib/cockpit-copilot-agent/backups/<timestamp>/<path>` for files written as
+root, or `~/.local/share/cockpit/copilot-backups/<timestamp>/<path>` otherwise.
+Backups are never pruned automatically.
+
 The `Custom (OpenAI Compatible)` provider uses the installed
 `/usr/libexec/cockpit-copilot-agent-llm-proxy` helper so arbitrary endpoint URLs do
 not need to be listed in the Cockpit manifest CSP. This helper only adapts the

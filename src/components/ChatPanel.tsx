@@ -9,9 +9,10 @@ import MessageBar from '@patternfly/chatbot/dist/dynamic/MessageBar';
 import ToolCall from '@patternfly/chatbot/dist/dynamic/ToolCall';
 import ToolResponse from '@patternfly/chatbot/dist/dynamic/ToolResponse';
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
-import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { RobotIcon, RedoIcon } from '@patternfly/react-icons';
+import { EmptyState, EmptyStateBody, EmptyStateFooter, EmptyStateActions } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
+import { RobotIcon, RedoIcon, PlayIcon } from '@patternfly/react-icons';
 import { ToolArguments } from "./ToolArguments.jsx";
+import { ApprovalPreview } from "./ApprovalPreview.jsx";
 import { ChatMessage } from "../lib/types.js";
 import type { Agent } from "../lib/agent.js";
 import { diagnostics, type DiagnosticSpan } from "../lib/diagnostics.js";
@@ -105,7 +106,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
 
     // Extract strings for translation to ensure xgettext picks them up
     const tCockpitCopilot = _("Cockpit Copilot");
-    const tGreeting = _("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs.");
+    const tGreeting = _("Hi! I'm your system agent using MCP. Ask me to manage services, install packages, or check system logs, or start with one of these:");
     const tToolCalling = _("Tool Calling");
     const tYou = _("You");
     const tCopilot = _("Copilot");
@@ -114,6 +115,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
     const tReject = _("Reject");
     const tThinking = _("Thinking...");
     const tPlaceholder = _("Type a command or ask a question...");
+
+    const quickActions = [
+        {
+            label: _("Health check"),
+            prompt: _("Run a read-only health check of this system: resources, disk usage, failed services, recent errors in the journal, and pending updates. Summarize problems by severity.")
+        },
+        {
+            label: _("Why is it slow?"),
+            prompt: _("The system feels slow. Investigate CPU, memory, swap, disk usage and the top processes, and explain the most likely cause.")
+        },
+        {
+            label: _("Failed services"),
+            prompt: _("List failed systemd units, show the relevant journal errors for each, and suggest fixes without changing anything yet.")
+        },
+        {
+            label: _("Available updates"),
+            prompt: _("Check for available package updates and whether a reboot is required. Do not install anything.")
+        },
+        {
+            label: _("Security review"),
+            prompt: _("Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual.")
+        },
+    ];
 
     return (
         <Chatbot displayMode={ChatbotDisplayMode.embedded}>
@@ -128,6 +152,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                             <EmptyStateBody>
                                 {tGreeting}
                             </EmptyStateBody>
+                            <EmptyStateFooter>
+                                <EmptyStateActions>
+                                    {quickActions.map(action => (
+                                        <Button
+                                            key={action.label}
+                                            variant="secondary"
+                                            isDisabled={isProcessing}
+                                            onClick={() => handleSendMessage(action.prompt)}
+                                        >
+                                            {action.label}
+                                        </Button>
+                                    ))}
+                                </EmptyStateActions>
+                            </EmptyStateFooter>
                         </EmptyState>
                     )
                     : (
@@ -170,30 +208,50 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                     // Render associated tool calls inline
                                     if (msg.role === 'assistant' && msg.toolCalls) {
                                         msg.toolCalls.forEach(tc => {
-                                            const isPending = agent.pendingApprovals.some(p => p.toolCall.id === tc.id);
+                                            const approval = agent.pendingApprovals.find(p => p.toolCall.id === tc.id);
+                                            const isPending = approval !== undefined;
                                             const isDone = messages.some(m => m.role === 'tool' && m.toolResult?.toolCallId === tc.id);
+                                            const args = parseToolArguments(tc.function.arguments);
+                                            // The diff already shows the new content.
+                                            if (approval?.preview?.kind === "diff")
+                                                delete args.content;
+                                            const toolName = agent.getToolDisplayName(tc.function.name);
 
                                             // Only render if pending or processing (not done)
                                             if (!isDone) {
+                                                const actions = isPending
+                                                    ? [
+                                                        <Button key="run" variant="secondary" size="sm" onClick={() => agent.approveToolCall(tc.id)}>
+                                                            {tApproveRun}
+                                                        </Button>,
+                                                        ...(approval.canRemember
+                                                            ? [
+                                                                <Button key="chat" variant="link" size="sm" onClick={() => agent.approveToolCall(tc.id, "chat")}>
+                                                                    {_("Allow for this chat")}
+                                                                </Button>
+                                                            ]
+                                                            : []),
+                                                        <Button key="reject" variant="link" size="sm" onClick={() => agent.rejectToolCall(tc.id)}>
+                                                            {tReject}
+                                                        </Button>
+                                                    ]
+                                                    : [
+                                                        <Button key="running" variant="secondary" size="sm" isDisabled isLoading>
+                                                            {_("Running...")}
+                                                        </Button>
+                                                    ];
                                                 messageElements.push(
                                                     <ToolCall
                                                     key={tc.id}
-                                                    titleText={`${tToolApprovalRequired}: ${agent.getToolDisplayName(tc.function.name)}`}
-                                                    runButtonText={isPending ? tApproveRun : _("Running...")}
-                                                    cancelButtonText={tReject}
-                                                    runButtonProps={{
-                                                        onClick: () => agent.approveToolCall(tc.id),
-                                                        isDisabled: !isPending,
-                                                        isLoading: !isPending
-                                                    }}
-                                                    cancelButtonProps={{
-                                                        onClick: () => agent.rejectToolCall(tc.id),
-                                                        isDisabled: !isPending
-                                                    }}
+                                                    titleText={isPending ? `${tToolApprovalRequired}: ${toolName}` : toolName}
+                                                    actions={actions}
                                                     expandableContent={
-                                                        <ToolArguments args={parseToolArguments(tc.function.arguments)} />
+                                                        <>
+                                                            <ToolArguments args={args} />
+                                                            {approval?.preview && <ApprovalPreview preview={approval.preview} />}
+                                                        </>
                                                     }
-                                                    isDefaultExpanded
+                                                    isDefaultExpanded={isPending}
                                                     />
                                                 );
                                             }
@@ -205,14 +263,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agent, messages, isProcess
                                     if (isLastMessage && msg.role === 'assistant' && !isProcessing && !agent.pendingApprovals.length) {
                                         messageElements.push(
                                             <div key="actions" style={{ marginLeft: '3.5rem', marginTop: '0.5rem' }}>
-                                                <Button
-                                                variant="link"
-                                                icon={<RedoIcon />}
-                                                onClick={() => agent.regenerateLastResponse()}
-                                                size="sm"
-                                                >
-                                                    {_("Regenerate")}
-                                                </Button>
+                                                {msg.notice === "step-limit"
+                                                    ? (
+                                                        <Button
+                                                        variant="secondary"
+                                                        icon={<PlayIcon />}
+                                                        onClick={() => agent.continueAfterStepLimit()}
+                                                        size="sm"
+                                                        >
+                                                            {_("Continue")}
+                                                        </Button>
+                                                    )
+                                                    : (
+                                                        <Button
+                                                        variant="link"
+                                                        icon={<RedoIcon />}
+                                                        onClick={() => agent.regenerateLastResponse()}
+                                                        size="sm"
+                                                        >
+                                                            {_("Regenerate")}
+                                                        </Button>
+                                                    )}
                                             </div>
                                         );
                                     }

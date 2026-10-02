@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
-import { CopilotSettings, DEFAULT_SETTINGS, McpServerConfig } from "./types.js";
+import { CopilotSettings, DEFAULT_SETTINGS, MAX_TOOL_STEPS, MIN_TOOL_STEPS, McpServerConfig } from "./types.js";
 import { ensureCockpitReady } from "./cockpit-ready.js";
 
 const SETTINGS_FILE_PATH = "/etc/cockpit/copilot-settings.json";
@@ -9,7 +9,8 @@ const cloneDefaultSettings = (): CopilotSettings => ({
     llm: { ...DEFAULT_SETTINGS.llm },
     mcpServers: [],
     customSystemPrompt: DEFAULT_SETTINGS.customSystemPrompt,
-    allowShellAccess: DEFAULT_SETTINGS.allowShellAccess
+    allowShellAccess: DEFAULT_SETTINGS.allowShellAccess,
+    maxToolSteps: DEFAULT_SETTINGS.maxToolSteps
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -30,10 +31,15 @@ const normalizeSettings = (loaded: unknown): CopilotSettings => {
     if (typeof llm.model === "string") result.llm.model = llm.model;
     if (typeof loaded.customSystemPrompt === "string") result.customSystemPrompt = loaded.customSystemPrompt;
     if (typeof loaded.allowShellAccess === "boolean") result.allowShellAccess = loaded.allowShellAccess;
+    if (typeof loaded.maxToolSteps === "number" && Number.isInteger(loaded.maxToolSteps))
+        result.maxToolSteps = Math.min(Math.max(loaded.maxToolSteps, MIN_TOOL_STEPS), MAX_TOOL_STEPS);
     if (Array.isArray(loaded.mcpServers)) {
         result.mcpServers = loaded.mcpServers.flatMap(value => {
             if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
-                typeof value.enabled !== "boolean" || !["stdio", "http", "local"].includes(String(value.transport)))
+                typeof value.enabled !== "boolean" || !["stdio", "http"].includes(String(value.transport)) ||
+                value.id === "builtin")
+                // "local" and the "builtin" id are reserved for the in-process
+                // system tools, whose risk metadata is trusted.
                 return [];
 
             const server: McpServerConfig = {

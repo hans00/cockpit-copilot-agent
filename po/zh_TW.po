@@ -113,8 +113,8 @@ msgstr ""
 #: src/components/ChatPanel.tsx:46
 msgid ""
 "Hi! I'm your system agent using MCP. Ask me to manage services, install "
-"packages, or check system logs."
-msgstr "嗨！我是你的系統代理。可以請我管理服務、安裝套件或檢查系統日誌。"
+"packages, or check system logs, or start with one of these:"
+msgstr "嗨！我是你的系統代理。可以請我管理服務、安裝套件或檢查系統日誌，也可以從下面的快捷動作開始："
 
 #: src/app.tsx:141
 msgid "Initializing Agent..."
@@ -228,3 +228,75 @@ msgstr "你"
 #: src/components/SettingsPage.tsx:37
 msgid "You do not have permission to save settings."
 msgstr "你沒有權限儲存設定。"
+
+#: src/components/ChatPanel.tsx
+msgid "Health check"
+msgstr "健康檢查"
+
+#: src/components/ChatPanel.tsx
+msgid "Run a read-only health check of this system: resources, disk usage, failed services, recent errors in the journal, and pending updates. Summarize problems by severity."
+msgstr "對這台系統做唯讀健康檢查：資源、磁碟用量、失敗的服務、日誌中的近期錯誤，以及待安裝的更新。依嚴重程度整理問題。"
+
+#: src/components/ChatPanel.tsx
+msgid "Why is it slow?"
+msgstr "為什麼變慢？"
+
+#: src/components/ChatPanel.tsx
+msgid "The system feels slow. Investigate CPU, memory, swap, disk usage and the top processes, and explain the most likely cause."
+msgstr "系統感覺變慢了。請檢查 CPU、記憶體、swap、磁碟用量和最耗資源的程序，並說明最可能的原因。"
+
+#: src/components/ChatPanel.tsx
+msgid "Failed services"
+msgstr "失敗的服務"
+
+#: src/components/ChatPanel.tsx
+msgid "List failed systemd units, show the relevant journal errors for each, and suggest fixes without changing anything yet."
+msgstr "列出失敗的 systemd unit，顯示各自相關的日誌錯誤，並提出修正建議，先不要做任何變更。"
+
+#: src/components/ChatPanel.tsx
+msgid "Available updates"
+msgstr "可用更新"
+
+#: src/components/ChatPanel.tsx
+msgid "Check for available package updates and whether a reboot is required. Do not install anything."
+msgstr "檢查可用的套件更新以及是否需要重新開機。不要安裝任何東西。"
+
+#: src/components/ChatPanel.tsx
+msgid "Security review"
+msgstr "安全檢查"
+
+#: src/components/ChatPanel.tsx
+msgid "Do a read-only security review: listening ports, firewall status, SELinux/AppArmor, failed SSH logins and recent logins. Highlight anything unusual."
+msgstr "做一次唯讀安全檢查：監聽埠、防火牆狀態、SELinux/AppArmor、SSH 登入失敗和近期登入紀錄。標出任何異常。"
+
+#: src/components/ChatPanel.tsx
+msgid "Allow for this chat"
+msgstr "本次對話都允許"
+
+#: src/components/ChatPanel.tsx
+msgid "Continue"
+msgstr "繼續"
+
+#: src/components/SettingsPage.tsx
+msgid "Maximum tool steps per request"
+msgstr "每次請求的最大工具步數"
+
+#: src/components/SettingsPage.tsx
+msgid "When reached, the agent pauses and can be continued."
+msgstr "達到上限時代理會暫停，之後可以繼續。"
+
+#: src/components/ApprovalPreview.tsx
+msgid "New file $0"
+msgstr "新檔案 $0"
+
+#: src/components/ApprovalPreview.tsx
+msgid "No changes to $0"
+msgstr "$0 沒有變更"
+
+#: src/components/ApprovalPreview.tsx
+msgid "Changes to $0"
+msgstr "$0 的變更"
+
+#: src/components/ApprovalPreview.tsx
+msgid "$0 more lines not shown"
+msgstr "還有 $0 行未顯示"

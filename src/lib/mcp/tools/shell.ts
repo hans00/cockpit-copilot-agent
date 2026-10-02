@@ -1,17 +1,14 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
-import cockpit from "cockpit";
+import { run as runCommand } from "./exec.js";
 
 export async function run(command: string): Promise<string> {
-    return await cockpit.spawn(
-        ["/bin/sh", "-c", command],
-        { binary: false }
-    );
+    return await runCommand(["/bin/sh", "-c", command]);
 }
 
 // sudo
 export async function sudo(runAs: string, command: string): Promise<string> {
-    return await cockpit.spawn(
+    return await runCommand(
         ["sudo", "-u", runAs, "sh", "-c", command],
-        { binary: false, superuser: "require" }
+        { superuser: "require" }
     );
 }

@@ -13,6 +13,8 @@ import * as network from "./tools/network.js";
 import * as users from "./tools/users.js";
 import * as logs from "./tools/logs.js";
 import * as shell from "./tools/shell.js";
+import * as system from "./tools/system.js";
+import * as security from "./tools/security.js";
 
 // Plugins
 import { ToolPlugin } from "./plugins/base.js";
@@ -20,6 +22,9 @@ import { VmPlugin } from "./plugins/vm.js";
 import { ContainerPlugin } from "./plugins/containers.js";
 import { ZfsPlugin } from "./plugins/zfs.js";
 import { SmartPlugin } from "./plugins/smart.js";
+
+const MAX_MEMORY_ENTRIES = 100;
+const MAX_MEMORY_ENTRY_LENGTH = 1000;
 
 export type McpServerLocalOptions = {
     allow_shell_access: boolean;
@@ -238,14 +243,16 @@ export class McpServerLocal {
             "file_write",
             {
                 title: "Write file",
-                description: "Write content to a file (requires root/permission)",
+                description: "Replace a file's entire content. Existing files are backed up first; root-owned files are written as root.",
                 inputSchema: z.object({
                     path: z.string().describe("Absolute path to file"),
-                    content: z.string().describe("Content to write")
+                    content: z.string().describe("Complete new content of the file"),
+                    backup: z.boolean().default(true)
+                            .describe("Back up the existing file before writing")
                 })
             },
-            async ({ path, content }) => {
-                const result = await files.writeFile(path, content);
+            async ({ path, content, backup }) => {
+                const result = await files.writeFile(path, content, { backup });
                 return {
                     content: [{ type: "text", text: result }]
                 };
@@ -339,44 +346,7 @@ export class McpServerLocal {
             }
         );
 
-        // Logs
-        this.server.registerTool(
-            "journal_query",
-            {
-                title: "Query system logs",
-                description: "Query system logs (journalctl)",
-                inputSchema: z.object({
-                    service: z.string().optional()
-                            .describe("Filter by systemd unit"),
-                    lines: z.number().default(50)
-                            .describe("Number of lines")
-                }),
-                _meta: { isLowRisk: true }
-            },
-            async ({ service, lines }) => {
-                const result = await logs.queryJournal(service, lines);
-                return {
-                    content: [{ type: "text", text: result }]
-                };
-            }
-        );
-
-        // System Info
-        this.server.registerTool(
-            "system_info",
-            {
-                title: "System info",
-                description: "Get system hostname, OS, kernel, uptime",
-                inputSchema: z.object({}),
-                _meta: { isLowRisk: true }
-            },
-            async () => {
-                const result = await this.getSystemInfo();
-                return {
-                    content: [{ type: "text", text: result }]
-                };
-            }
-        );
+        this.setupDiagnosticTools();
 
         // User owned data
         // ~/.local/share/cockpit/copilot-memory.json
@@ -416,18 +386,25 @@ export class McpServerLocal {
                 _meta: { isLowRisk: true }
             },
             async ({ content }) => {
-                // Append content to memory file
+                // Append content to memory file, keeping only the newest
+                // entries so memory_read stays small enough for the context.
                 let memory: string[] = [];
                 const file = cockpit.file(memoryPath.replace("$HOME", cockpit.info.user.home));
                 try {
                     try {
-                        memory = JSON.parse(await file.read());
+                        const parsed: unknown = JSON.parse(await file.read());
+                        if (Array.isArray(parsed))
+                            memory = parsed.filter((entry): entry is string => typeof entry === "string");
                     } catch {
-                        // Ignore error
+                        // Missing or unreadable memory starts empty
                     }
-                    const result = await file.replace(JSON.stringify([...memory, content], null, 2));
+                    const entry = content.trim().slice(0, MAX_MEMORY_ENTRY_LENGTH);
+                    if (!entry)
+                        return { content: [{ type: "text", text: "Nothing to remember." }] };
+                    const next = [...memory.filter(existing => existing !== entry), entry].slice(-MAX_MEMORY_ENTRIES);
+                    await file.replace(JSON.stringify(next, null, 2));
                     return {
-                        content: [{ type: "text", text: result }]
+                        content: [{ type: "text", text: `Memory saved (${next.length}/${MAX_MEMORY_ENTRIES} entries).` }]
                     };
                 } finally {
                     file.close();
@@ -436,14 +413,311 @@ export class McpServerLocal {
         );
     }
 
-    private async getSystemInfo(): Promise<string> {
-        try {
-            const hostname = (await cockpit.spawn(["hostname"])).trim();
-            const uptime = (await cockpit.spawn(["uptime", "-p"])).trim();
-            return `Hostname: ${hostname}\nUptime: ${uptime}`;
-        } catch (e: unknown) {
-            return `Error getting system info: ${e instanceof Error ? e.message : String(e)}`;
-        }
+    /** Read-only inspection tools plus a few scoped account changes. */
+    private setupDiagnosticTools() {
+        const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
+        const json = (value: unknown) => typeof value === "string" ? text(value) : text(JSON.stringify(value, null, 2));
+        const scope = z.enum(["system", "user"]).default("system")
+                .describe("Systemd scope");
+
+        // System
+        this.server.registerTool(
+            "system_info",
+            {
+                title: "System info",
+                description: "Get hostname, OS, kernel, architecture, virtualization, boot time and uptime",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await system.getSystemInfo())
+        );
+
+        this.server.registerTool(
+            "system_resources",
+            {
+                title: "System resources",
+                description: "Get CPU count, load average, memory and swap usage",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await system.getResources())
+        );
+
+        this.server.registerTool(
+            "disk_usage",
+            {
+                title: "Disk usage",
+                description: "Get filesystem space and inode usage (df)",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await system.getDiskUsage())
+        );
+
+        this.server.registerTool(
+            "process_top",
+            {
+                title: "Top processes",
+                description: "List the processes using the most CPU or memory",
+                inputSchema: z.object({
+                    sort_by: z.enum(["cpu", "memory"]).default("cpu")
+                            .describe("Sort key"),
+                    limit: z.number().int()
+                            .min(1)
+                            .max(100)
+                            .default(15)
+                            .describe("Number of processes")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ sort_by, limit }) => text(await system.listTopProcesses(sort_by, limit))
+        );
+
+        // Services
+        this.server.registerTool(
+            "service_failed",
+            {
+                title: "Failed units",
+                description: "List systemd units in the failed state",
+                inputSchema: z.object({ scope }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ scope }) => json(await systemd.listFailed(scope))
+        );
+
+        this.server.registerTool(
+            "service_unit_file",
+            {
+                title: "Show unit file",
+                description: "Show a unit's definition including drop-ins (systemctl cat)",
+                inputSchema: z.object({
+                    unit: z.string().describe("Unit name"),
+                    scope
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ unit, scope }) => text(await systemd.catUnit(unit, scope))
+        );
+
+        this.server.registerTool(
+            "service_dependencies",
+            {
+                title: "Unit dependencies",
+                description: "Show what a unit depends on, or with reverse=true, what depends on it (impact of stopping it)",
+                inputSchema: z.object({
+                    unit: z.string().describe("Unit name"),
+                    reverse: z.boolean().default(false)
+                            .describe("List units that depend on this unit"),
+                    scope
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ unit, reverse, scope }) => text(await systemd.listDependencies(unit, reverse, scope))
+        );
+
+        this.server.registerTool(
+            "scheduled_jobs",
+            {
+                title: "Scheduled jobs",
+                description: "List systemd timers and cron jobs",
+                inputSchema: z.object({ scope }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ scope }) => text(`Systemd timers:\n${await systemd.listTimers(scope)}\n\n${await security.listScheduledJobs()}`)
+        );
+
+        // Logs
+        this.server.registerTool(
+            "journal_query",
+            {
+                title: "Query system logs",
+                description: "Query system logs (journalctl) with optional unit, priority, time range, text and boot filters",
+                inputSchema: z.object({
+                    service: z.string().optional()
+                            .describe("Filter by systemd unit"),
+                    lines: z.number().int()
+                            .min(1)
+                            .max(logs.MAX_JOURNAL_LINES)
+                            .default(50)
+                            .describe(`Number of most recent lines (max ${logs.MAX_JOURNAL_LINES})`),
+                    priority: z.enum(logs.JOURNAL_PRIORITIES).optional()
+                            .describe("Show this priority and more severe, e.g. 'err'"),
+                    since: z.string().optional()
+                            .describe("Start time, e.g. '-1h', 'today', '2024-01-31 10:00'"),
+                    until: z.string().optional()
+                            .describe("End time, same format as since"),
+                    grep: z.string().optional()
+                            .describe("Case-insensitive regular expression to match messages"),
+                    boot: z.number().int()
+                            .max(0)
+                            .optional()
+                            .describe("Boot offset: 0 is the current boot, -1 the previous one"),
+                    kernel: z.boolean().optional()
+                            .describe("Only kernel messages (dmesg)")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async (query) => text(await logs.queryJournal(query))
+        );
+
+        this.server.registerTool(
+            "journal_boots",
+            {
+                title: "List boots",
+                description: "List recorded boots, e.g. to find unexpected reboots",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await logs.listBoots())
+        );
+
+        // Network
+        this.server.registerTool(
+            "network_ports",
+            {
+                title: "Listening ports",
+                description: "List listening TCP/UDP sockets and their processes (ss)",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await network.listListeningPorts())
+        );
+
+        this.server.registerTool(
+            "network_routes",
+            {
+                title: "Routes and DNS",
+                description: "Show IPv4/IPv6 routes and DNS resolver configuration",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await network.getRoutesAndDns())
+        );
+
+        this.server.registerTool(
+            "network_check",
+            {
+                title: "Connectivity check",
+                description: "Resolve and ping a host, optionally testing a TCP port",
+                inputSchema: z.object({
+                    host: z.string().describe("Hostname or IP address"),
+                    port: z.number().int()
+                            .min(1)
+                            .max(65535)
+                            .optional()
+                            .describe("TCP port to test")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ host, port }) => text(await network.checkConnectivity(host, port))
+        );
+
+        this.server.registerTool(
+            "firewall_status",
+            {
+                title: "Firewall status",
+                description: "Show firewall state and rules (firewalld, ufw, nftables or iptables)",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await network.getFirewallStatus())
+        );
+
+        // Packages
+        this.server.registerTool(
+            "package_updates",
+            {
+                title: "Available updates",
+                description: "List available package updates and whether a reboot is required",
+                inputSchema: z.object({
+                    refresh: z.boolean().default(false)
+                            .describe("Refresh repository metadata first (apt; requires root)")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ refresh }) => text(await packages.listUpdates(refresh))
+        );
+
+        this.server.registerTool(
+            "package_history",
+            {
+                title: "Package history",
+                description: "Show recent package install/remove/upgrade transactions",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await packages.history())
+        );
+
+        // Users and security
+        this.server.registerTool(
+            "user_info",
+            {
+                title: "User info",
+                description: "Show a user's account, groups, password/lock status, last login and sudo rights",
+                inputSchema: z.object({
+                    username: z.string().describe("Username")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ username }) => text(await users.getUserInfo(username))
+        );
+
+        this.server.registerTool(
+            "login_history",
+            {
+                title: "Login history",
+                description: "Show recent successful and failed logins",
+                inputSchema: z.object({
+                    limit: z.number().int()
+                            .min(1)
+                            .max(200)
+                            .default(20)
+                            .describe("Number of entries")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ limit }) => text(await users.getLoginHistory(limit))
+        );
+
+        this.server.registerTool(
+            "user_modify",
+            {
+                title: "Modify user",
+                description: "Lock or unlock a user account, or add/remove it from a group (requires root)",
+                inputSchema: z.object({
+                    username: z.string().describe("Username"),
+                    action: z.enum(["lock", "unlock", "add_group", "remove_group"]).describe("Change to make"),
+                    group: z.string().optional()
+                            .describe("Group for add_group/remove_group")
+                })
+            },
+            async ({ username, action, group }) => text(await users.modifyUser(username, action, group))
+        );
+
+        this.server.registerTool(
+            "security_status",
+            {
+                title: "Security status",
+                description: "Summarize SELinux/AppArmor state, failed SSH logins in the last 24h and pending security updates",
+                inputSchema: z.object({}),
+                _meta: { isLowRisk: true }
+            },
+            async () => text(await security.getSecurityStatus())
+        );
+
+        this.server.registerTool(
+            "certificate_check",
+            {
+                title: "Certificate check",
+                description: "Show subject, issuer, SANs and days until expiry for a PEM certificate file or a TLS endpoint",
+                inputSchema: z.object({
+                    target: z.string().describe("Absolute path to a certificate, or host[:port] (default port 443)")
+                }),
+                _meta: { isLowRisk: true }
+            },
+            async ({ target }) => text(await security.checkCertificate(target))
+        );
     }
 
     async initOptionalPlugins(signal?: AbortSignal): Promise<void> {

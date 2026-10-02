@@ -11,7 +11,7 @@ import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/co
 
 import { loadSettings, saveSettings } from "../lib/settings.js";
 import { readCredentials, writeCredentials } from "../lib/credentials.js";
-import { CopilotSettings, DEFAULT_SETTINGS } from "../lib/types.js";
+import { CopilotSettings, DEFAULT_SETTINGS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from "../lib/types.js";
 import { McpServerList } from "./McpServerList.jsx";
 import { _ } from "../lib/i18n.js";
 
@@ -151,7 +151,24 @@ export const SettingsPage: React.FC<{
                     />
                 </FormGroup>
 
-                <div className="pf-v6-u-my-md" />
+                <FormGroup label={_("Maximum tool steps per request")} fieldId="max-tool-steps">
+                    <TextInput
+                        id="max-tool-steps"
+                        type="number"
+                        min={MIN_TOOL_STEPS}
+                        max={MAX_TOOL_STEPS}
+                        value={settings.maxToolSteps}
+                        onChange={(_e, val) => {
+                            const parsed = Number.parseInt(val, 10);
+                            if (Number.isFinite(parsed))
+                                setSettings({ ...settings, maxToolSteps: Math.min(Math.max(parsed, MIN_TOOL_STEPS), MAX_TOOL_STEPS) });
+                        }}
+                        isDisabled={!isAdmin}
+                    />
+                    <div className="pf-v6-c-form__helper-text" aria-live="polite">
+                        {_("When reached, the agent pauses and can be continued.")}
+                    </div>
+                </FormGroup>
 
                 <div className="pf-v6-u-my-md" />
 

@@ -13,6 +13,14 @@ export interface McpTool {
     };
 }
 
+export interface ToolRegistration {
+    serverId: string;
+    originalName: string;
+    // True only for the in-process system tools shipped with this package.
+    builtin: boolean;
+    tool: McpTool;
+}
+
 export interface McpServerConfig {
     id: string; // uuid
     name: string; // e.g. "My DB Tools"
@@ -33,7 +41,12 @@ export interface CopilotSettings {
     mcpServers: McpServerConfig[];
     customSystemPrompt: string;
     allowShellAccess: boolean;
+    // Maximum model/tool round trips per request before asking to continue.
+    maxToolSteps: number;
 }
+
+export const MIN_TOOL_STEPS = 1;
+export const MAX_TOOL_STEPS = 100;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
     llm: {
@@ -44,7 +57,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     },
     mcpServers: [],
     customSystemPrompt: "",
-    allowShellAccess: false
+    allowShellAccess: false,
+    maxToolSteps: 25
 };
 
 export interface ToolCall {
@@ -69,6 +83,8 @@ export interface ChatMessage {
     content: string; // basic text content
     toolCalls?: ToolCall[];
     toolResult?: ToolResult;
+    // Set on the assistant notice added when the step limit is reached.
+    notice?: "step-limit";
 }
 
 export interface ChatSession {

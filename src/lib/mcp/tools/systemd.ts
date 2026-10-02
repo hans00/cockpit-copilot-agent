@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 import cockpit from "cockpit";
+import { execute, formatResult, run } from "./exec.js";
 
 const errorDetails = (error: unknown): { message: string; output?: string } => {
     if (error && typeof error === "object") {
@@ -17,29 +18,44 @@ const errorDetails = (error: unknown): { message: string; output?: string } => {
 
 export interface UnitInfo {
     unit: string;
+    load: string;
     status: string;
+    sub: string;
     description: string;
+}
+
+/**
+ * Parse `systemctl list-units --plain --no-legend` output.
+ *
+ * Without --plain, systemctl prefixes failed and not-found units with a
+ * status bullet, which shifts every column; tolerate it anyway in case
+ * the output comes from elsewhere.
+ */
+export function parseUnitList(output: string): UnitInfo[] {
+    const units: UnitInfo[] = [];
+    for (const line of output.split("\n")) {
+        const cleaned = line.trim().replace(/^[●*×○]\s+/, "");
+        const parts = cleaned.split(/\s+/);
+        if (!parts[0])
+            continue;
+        units.push({
+            unit: parts[0],
+            load: parts[1] || "unknown",
+            status: parts[2] || "unknown",
+            sub: parts[3] || "unknown",
+            description: parts.slice(4).join(" ")
+        });
+    }
+    return units;
 }
 
 export async function listUnits(scope: "system" | "user" = "system"): Promise<UnitInfo[]> {
     try {
-        const args = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"];
+        const args = ["systemctl", "list-units", "--type=service", "--all", "--plain", "--no-pager", "--no-legend"];
         if (scope === "user") {
             args.splice(1, 0, "--user");
         }
-        const result = await cockpit.spawn(args);
-        const units: UnitInfo[] = [];
-
-        for (const line of result.split("\n")) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 1 && parts[0]) {
-                const unit_name = parts[0];
-                const status = parts[2] || "unknown";
-                const desc = parts.slice(4).join(" ") || "";
-                units.push({ unit: unit_name, status, description: desc });
-            }
-        }
-        return units;
+        return parseUnitList(await cockpit.spawn(args));
     } catch (e: unknown) {
         console.error("Error listing units:", e);
         return [];
@@ -79,4 +95,29 @@ export async function manageService(unit: string, action: string, scope: "system
     } catch (e: unknown) {
         return `Error: ${errorDetails(e).message}`;
     }
+}
+
+const scoped = (args: string[], scope: "system" | "user"): string[] =>
+    scope === "user" ? [args[0], "--user", ...args.slice(1)] : args;
+
+export async function listFailed(scope: "system" | "user" = "system"): Promise<UnitInfo[] | string> {
+    const result = await execute(scoped(["systemctl", "list-units", "--failed", "--all", "--plain", "--no-pager", "--no-legend"], scope));
+    if (result.exitCode !== 0 || result.problem !== undefined)
+        return formatResult(result);
+    return parseUnitList(result.output);
+}
+
+export async function listTimers(scope: "system" | "user" = "system"): Promise<string> {
+    return await run(scoped(["systemctl", "list-timers", "--all", "--no-pager"], scope));
+}
+
+export async function catUnit(unit: string, scope: "system" | "user" = "system"): Promise<string> {
+    return await run(scoped(["systemctl", "cat", "--no-pager", "--", unit], scope));
+}
+
+export async function listDependencies(unit: string, reverse: boolean, scope: "system" | "user" = "system"): Promise<string> {
+    const args = ["systemctl", "list-dependencies", "--no-pager", "--plain"];
+    if (reverse)
+        args.push("--reverse");
+    return await run(scoped([...args, "--", unit], scope));
 }
